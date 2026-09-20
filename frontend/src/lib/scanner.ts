@@ -15,7 +15,7 @@ export function parseScaleBarcode(code: string): ScaleBarcodeInfo {
   const clean = code.trim()
   if ((clean.length === 12 || clean.length === 13) && /^\d+$/.test(clean)) {
     const prefix = clean.substring(0, 2)
-    if (['20', '21', '02'].includes(prefix)) {
+    if (['02', '03', '20', '21', '22', '28'].includes(prefix)) {
       const plu = clean.substring(2, 7)
       const value = parseInt(clean.substring(7, 12), 10)
       const weightKg = Number((value / 1000).toFixed(3))

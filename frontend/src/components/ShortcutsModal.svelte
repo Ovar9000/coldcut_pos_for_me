@@ -15,8 +15,8 @@
     { key: 'Enter', desc: 'Confirm Scan / Add Highlighted Item / Finish Sale' },
     { key: 'Esc', desc: 'Close Active Modal / Clear Search / Reset State' },
     { key: '↑ / ↓', desc: 'Navigate Search Results Dropdown' },
-    { key: '1x - 12x', desc: 'Click Qty Multiplier before tapping any staple tile' },
-    { key: '20/21 Barcodes', desc: 'Automatic Weighing Scale EAN-13 Barcode Decoder' }
+    { key: '1x - 10x', desc: 'Click Qty Multiplier before tapping any item tile' },
+    { key: 'Dahua Labels', desc: 'Shanghai Dahua / Rongta EAN-13 Scale Barcodes (03, 21, 28...)' }
   ]
 </script>
 

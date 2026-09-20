@@ -130,7 +130,7 @@ class SupabaseSyncService:
         if not target_db.exists():
             return {"success": False, "error": f"Database file not found at {target_db}"}
 
-        filename = f"store_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
+        filename = f"coldcut_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
         file_size_bytes = os.path.getsize(target_db)
 
         try:

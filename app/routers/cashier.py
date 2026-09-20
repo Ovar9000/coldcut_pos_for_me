@@ -19,8 +19,90 @@ router = APIRouter()
 
 
 # ═══════════════════════════════════════════════════════════════
-# SMART SCAN & PRODUCT LOOKUP ROUTES
+# SMART SCAN & SCALE BARCODE ENGINE (Dahua, Rongta, Toledo, CAS)
 # ═══════════════════════════════════════════════════════════════
+
+SCALE_PREFIXES = ("02", "03", "20", "21", "22", "28")
+
+async def resolve_scale_barcode(clean_code: str, db):
+    """
+    Decodes in-store thermal scale barcode labels (e.g. Shanghai Dahua, Rongta, Toledo, CAS).
+    Supports EAN-13 barcodes with prefixes 02, 03, 20, 21, 22, 28.
+    Matches PLU code by plu_code, id, or barcode across standard and reverse slices.
+    """
+    if not ((len(clean_code) in (12, 13)) and clean_code.isdigit() and clean_code[:2] in SCALE_PREFIXES):
+        return None
+
+    prefix = clean_code[:2]
+
+    # Test candidate slices for 5-digit and 4-digit PLUs (both standard and reverse formats)
+    candidates = [
+        (clean_code[2:7], int(clean_code[7:12])), # 5-digit standard [2:7]
+        (clean_code[2:6], int(clean_code[6:12])), # 4-digit standard [2:6]
+        (clean_code[7:12], int(clean_code[2:7])), # 5-digit reverse [7:12]
+        (clean_code[7:11], int(clean_code[2:7])), # 4-digit reverse [7:11]
+    ]
+
+    product_row = None
+    value_int = 0
+
+    for plu_raw, val_candidate in candidates:
+        plu_c = plu_raw.lstrip("0") or "0"
+        plu_num = int(plu_c) if plu_c.isdigit() else -1
+
+        cursor = await db.execute(
+            "SELECT * FROM products WHERE plu_code = ? OR id = ? OR barcode = ? OR barcode = ?",
+            (plu_num, plu_num, plu_raw, plu_c)
+        )
+        row = await cursor.fetchone()
+        if row:
+            product_row = row
+            value_int = val_candidate
+            break
+
+    if not product_row:
+        return None
+
+    product = dict(product_row)
+    product["is_low_stock"] = product["stock_qty"] < product["low_stock_threshold"]
+    unit = product.get("unit", "pc").lower()
+
+    if unit in ("kg", "l"):
+        weight_qty = round(value_int / 1000.0, 3)
+        subtotal = round(weight_qty * float(product["selling_price"]), 2)
+        return {
+            "scan_type": "scale_weight",
+            "product": product,
+            "quantity_to_add": weight_qty,
+            "effective_unit_price": float(product["selling_price"]),
+            "effective_subtotal": subtotal,
+            "pack_label": f"Scale Weighed ({weight_qty:.3f}{unit})",
+            "message": f"Scale Barcode: {product['name']} ({weight_qty:.3f}{unit} — ₱{subtotal:.2f})"
+        }
+    elif unit in ("g", "ml"):
+        qty = float(value_int)
+        subtotal = round((qty / 1000.0) * float(product["selling_price"]), 2)
+        return {
+            "scan_type": "scale_weight",
+            "product": product,
+            "quantity_to_add": qty,
+            "effective_unit_price": float(product["selling_price"]),
+            "effective_subtotal": subtotal,
+            "pack_label": f"Scale Weighed ({qty:.0f}{unit})",
+            "message": f"Scale Barcode: {product['name']} ({qty:.0f}{unit} — ₱{subtotal:.2f})"
+        }
+    else:
+        price_val = round(value_int / 100.0, 2)
+        return {
+            "scan_type": "scale_price",
+            "product": product,
+            "quantity_to_add": 1.0,
+            "effective_unit_price": price_val,
+            "effective_subtotal": price_val,
+            "pack_label": f"Scale Tag (₱{price_val:.2f})",
+            "message": f"Scale Barcode: {product['name']} (₱{price_val:.2f})"
+        }
+
 
 @router.post("/smart-scan")
 @router.get("/smart-scan")
@@ -104,57 +186,10 @@ async def smart_scan_lookup(code: str, db=Depends(get_db)):
             "message": f"Scanned: {product['name']} (₱{product['selling_price']:.2f})"
         }
 
-    # 4. Check Variable-Measure / Weight-Embedded Scale Barcode (EAN-13 starting with 20, 21, or 02)
-    if (len(clean_code) in (12, 13)) and clean_code[:2] in ("20", "21", "02") and clean_code.isdigit():
-        plu_str = clean_code[2:7]
-        plu_clean = plu_str.lstrip("0") or "0"
-        value_int = int(clean_code[7:12])
-
-        cursor = await db.execute(
-            "SELECT * FROM products WHERE id = ? OR barcode = ? OR barcode = ?",
-            (int(plu_clean) if plu_clean.isdigit() else -1, plu_str, plu_clean)
-        )
-        row = await cursor.fetchone()
-        if row:
-            product = dict(row)
-            product["is_low_stock"] = product["stock_qty"] < product["low_stock_threshold"]
-
-            unit = product.get("unit", "pc").lower()
-            if unit in ("kg", "l"):
-                weight_qty = round(value_int / 1000.0, 3)
-                subtotal = round(weight_qty * float(product["selling_price"]), 2)
-                return {
-                    "scan_type": "scale_weight",
-                    "product": product,
-                    "quantity_to_add": weight_qty,
-                    "effective_unit_price": float(product["selling_price"]),
-                    "effective_subtotal": subtotal,
-                    "pack_label": f"Scale Weighed ({weight_qty:.3f}{unit})",
-                    "message": f"Scale Barcode: {product['name']} ({weight_qty:.3f}{unit} — ₱{subtotal:.2f})"
-                }
-            elif unit in ("g", "ml"):
-                qty = float(value_int)
-                subtotal = round((qty / 1000.0) * float(product["selling_price"]), 2)
-                return {
-                    "scan_type": "scale_weight",
-                    "product": product,
-                    "quantity_to_add": qty,
-                    "effective_unit_price": float(product["selling_price"]),
-                    "effective_subtotal": subtotal,
-                    "pack_label": f"Scale Weighed ({qty:.0f}{unit})",
-                    "message": f"Scale Barcode: {product['name']} ({qty:.0f}{unit} — ₱{subtotal:.2f})"
-                }
-            else:
-                price_val = round(value_int / 100.0, 2)
-                return {
-                    "scan_type": "scale_price",
-                    "product": product,
-                    "quantity_to_add": 1.0,
-                    "effective_unit_price": price_val,
-                    "effective_subtotal": price_val,
-                    "pack_label": f"Scale Tag (₱{price_val:.2f})",
-                    "message": f"Scale Barcode: {product['name']} (₱{price_val:.2f})"
-                }
+    # 4. Check Variable-Measure / Weight-Embedded Scale Barcode (Shanghai Dahua, Rongta, Toledo, CAS)
+    scale_res = await resolve_scale_barcode(clean_code, db)
+    if scale_res:
+        return scale_res
 
     raise HTTPException(
         status_code=404,
@@ -180,43 +215,15 @@ async def get_product_by_barcode(barcode: str, db=Depends(get_db)):
 
     if not row:
         # Check scale barcode
-        if (len(clean_code) in (12, 13)) and clean_code[:2] in ("20", "21", "02") and clean_code.isdigit():
-            plu_str = clean_code[2:7]
-            plu_clean = plu_str.lstrip("0") or "0"
-            value_int = int(clean_code[7:12])
-            cursor = await db.execute(
-                "SELECT * FROM products WHERE id = ? OR barcode = ? OR barcode = ?",
-                (int(plu_clean) if plu_clean.isdigit() else -1, plu_str, plu_clean)
-            )
-            scale_row = await cursor.fetchone()
-            if scale_row:
-                product = dict(scale_row)
-                product["is_low_stock"] = product["stock_qty"] < product["low_stock_threshold"]
-                unit = product.get("unit", "pc").lower()
-                if unit in ("kg", "l"):
-                    weight_qty = round(value_int / 1000.0, 3)
-                    product["scan_type"] = "scale_weight"
-                    product["default_qty"] = weight_qty
-                    product["default_price"] = float(product["selling_price"])
-                    product["default_subtotal"] = round(weight_qty * float(product["selling_price"]), 2)
-                    product["pack_label"] = f"Scale Weighed ({weight_qty:.3f}{unit})"
-                    return product
-                elif unit in ("g", "ml"):
-                    qty = float(value_int)
-                    product["scan_type"] = "scale_weight"
-                    product["default_qty"] = qty
-                    product["default_price"] = float(product["selling_price"])
-                    product["default_subtotal"] = round((qty / 1000.0) * float(product["selling_price"]), 2)
-                    product["pack_label"] = f"Scale Weighed ({qty:.0f}{unit})"
-                    return product
-                else:
-                    price_val = round(value_int / 100.0, 2)
-                    product["scan_type"] = "scale_price"
-                    product["default_qty"] = 1.0
-                    product["default_price"] = price_val
-                    product["default_subtotal"] = price_val
-                    product["pack_label"] = f"Scale Tag (₱{price_val:.2f})"
-                    return product
+        scale_res = await resolve_scale_barcode(clean_code, db)
+        if scale_res:
+            product = scale_res["product"]
+            product["scan_type"] = scale_res["scan_type"]
+            product["default_qty"] = scale_res["quantity_to_add"]
+            product["default_price"] = scale_res["effective_unit_price"]
+            product["default_subtotal"] = scale_res["effective_subtotal"]
+            product["pack_label"] = scale_res["pack_label"]
+            return product
 
         raise HTTPException(
             status_code=404,

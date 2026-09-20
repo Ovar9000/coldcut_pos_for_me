@@ -94,6 +94,8 @@ CREATE TABLE IF NOT EXISTS products (
     full_pack_price     REAL,                               -- Selling price for 1 full bulk pack/tie
     half_dozen_price    REAL,                               -- Legacy bundle price
     dozen_price         REAL,                               -- Legacy bundle price
+    plu_code            INTEGER,                            -- Dahua/Universal Scale PLU key (1-999)
+    freezer_section     TEXT DEFAULT 'Frozen Main',         -- 'Poultry Freezer', 'Processed Freezer', 'Ice Freezer', 'Drink Chiller'
     created_at          DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at          DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -200,6 +202,7 @@ CREATE TABLE IF NOT EXISTS debt_transactions (
 -- INDEXES for fast lookups
 -- =============================================================
 CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode);
+CREATE INDEX IF NOT EXISTS idx_products_plu_code ON products(plu_code);
 CREATE INDEX IF NOT EXISTS idx_products_category ON products(category);
 CREATE INDEX IF NOT EXISTS idx_products_quick ON products(is_quick_item);
 CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(created_at);
@@ -212,12 +215,14 @@ CREATE INDEX IF NOT EXISTS idx_debt_txns_debt_id ON debt_transactions(debt_id);
 
 # ─── Default settings to insert on first run ─────────────────────────
 DEFAULT_SETTINGS = {
-    "store_name": "Sari-Sari Store",
+    "store_name": "Coldcut POS — Frozen Goods & Chilled Drinks",
     "store_address": "",
     "store_phone": "",
     "admin_password": hash_password("admin123"), # Secure default password hash
     "receipt_enabled": "1",
     "gcash_fee_per_thousand": "10",              # Fee per 1000 PHP block
+    "scale_prefix": "03,21,20,02,28",
+    "scale_type": "dahua",
     "cloud_sync_enabled": "0",
     "cloud_sync_endpoint": "",
     "cloud_api_key": "",
@@ -228,15 +233,43 @@ DEFAULT_SETTINGS = {
 }
 
 # ─── Sample products for first-run demo ──────────────────────────────
+# (barcode, pack_barcode, jar_code, refill_price, refill_qty, name, cost, sell, stock, threshold, unit, is_quick, color, category, pcs_per_pack, bulk_cost, full_pack, plu_code, freezer_section)
 SAMPLE_PRODUCTS = [
-    # (barcode, pack_barcode, jar_code, refill_price, refill_qty, name, cost, sell, stock, threshold, unit, is_quick, color, category, pcs_per_pack, bulk_cost, full_pack)
-    (None, None, "JAR:GAS-1L", 62.00, 1.0, "Gasoline Refill (1L Bottle)", 55.00, 62.00, 100.0, 20.0, "L", 0, "#ef4444", "Fuel", 1, None, None),
-    (None, None, "JAR:RICE-1KG", 45.00, 1.0, "Sinandomeng Rice (1 Kilo)", 38.00, 45.00, 150.0, 20.0, "kg", 0, "#f59e0b", "Staples", 1, None, None),
-    (None, None, "JAR:SUGAR-500G", 35.00, 0.5, "White Sugar Refill (500g)", 28.00, 35.00, 80.0, 15.0, "kg", 0, "#10b981", "Staples", 1, None, None),
-    (None, None, "JAR:OIL-250ML", 20.00, 0.25, "Cooking Oil (250ml Pouch)", 15.00, 20.00, 50.0, 10.0, "L", 0, "#eab308", "Cooking", 1, None, None),
-    (None, None, "JAR:CANDY-MAXX", 1.00, 1.0, "Maxx Menthol Candy (Jar)", 0.50, 1.00, 300.0, 50.0, "pc", 0, "#ec4899", "Snacks", 50, 22.00, 45.00),
-    ("4800016121005", "4800016121005-PACK", None, None, 1.0, "Lucky Me Pancit Canton Original", 9.00, 12.00, 120.0, 20.0, "pc", 0, "#10b981", "Noodles", 10, 85.00, 115.00),
-    ("4800361413022", "4800361413022-PACK", "JAR:KOPIKO-STICK", 7.00, 1.0, "Kopiko Brown Coffee 25g", 5.00, 7.00, 100.0, 15.0, "pc", 0, "#8b5cf6", "Beverages", 10, 48.00, 65.00),
+    # ── 1. Poultry & Cuts (By Weight / Dahua Scale PLU) ──
+    (None, None, None, None, 1.0, "Chicken Feet / Adidas", 120.00, 160.00, 50.0, 10.0, "kg", 1, "#ef4444", "Poultry & Cuts", 1, None, None, 1, "Poultry Freezer"),
+    (None, None, None, None, 1.0, "Chicken Gizzard / Balun-balunan", 145.00, 190.00, 45.0, 10.0, "kg", 1, "#dc2626", "Poultry & Cuts", 1, None, None, 2, "Poultry Freezer"),
+    (None, None, None, None, 1.0, "Chicken Liver / Atay", 140.00, 180.00, 30.0, 8.0, "kg", 1, "#b91c1c", "Poultry & Cuts", 1, None, None, 3, "Poultry Freezer"),
+    (None, None, None, None, 1.0, "Chicken Wings / Pakpak", 185.00, 230.00, 60.0, 15.0, "kg", 1, "#f97316", "Poultry & Cuts", 1, None, None, 4, "Poultry Freezer"),
+    (None, None, None, None, 1.0, "Whole Dressed Chicken", 155.00, 190.00, 40.0, 10.0, "kg", 1, "#ea580c", "Poultry & Cuts", 1, None, None, 5, "Poultry Freezer"),
+    (None, None, None, None, 1.0, "Chicken Breast Fillet", 200.00, 250.00, 35.0, 8.0, "kg", 1, "#fb923c", "Poultry & Cuts", 1, None, None, 6, "Poultry Freezer"),
+    (None, None, None, None, 1.0, "Pork Liempo (Belly Cut)", 280.00, 340.00, 40.0, 10.0, "kg", 1, "#be123c", "Frozen Meats", 1, None, None, 7, "Frozen Meats"),
+    (None, None, None, None, 1.0, "Pork Chops (Bone-in)", 260.00, 320.00, 30.0, 8.0, "kg", 1, "#e11d48", "Frozen Meats", 1, None, None, 8, "Frozen Meats"),
+
+    # ── 2. TJ Hotdogs & Ready to Cook Packs ──
+    ("4800016001017", None, None, None, 1.0, "TJ Hotdog Jumbo (1kg Pack)", 175.00, 210.00, 50.0, 10.0, "pack", 1, "#ef4444", "TJ Hotdogs & Packs", 1, None, None, 11, "Processed Freezer"),
+    ("4800016001024", None, None, None, 1.0, "TJ Hotdog Regular (500g)", 95.00, 115.00, 40.0, 10.0, "pack", 1, "#f87171", "TJ Hotdogs & Packs", 1, None, None, 12, "Processed Freezer"),
+    ("4800016001031", None, None, None, 1.0, "TJ Cheesedog Jumbo (1kg)", 185.00, 220.00, 35.0, 8.0, "pack", 1, "#f59e0b", "TJ Hotdogs & Packs", 1, None, None, 13, "Processed Freezer"),
+    ("4800016001048", None, None, None, 1.0, "TJ Hotdog Classic (250g)", 52.00, 65.00, 40.0, 10.0, "pack", 1, "#fbbf24", "TJ Hotdogs & Packs", 1, None, None, 14, "Processed Freezer"),
+    ("4800016002014", None, None, None, 1.0, "Purefoods Sweet Tocino 450g", 102.00, 125.00, 30.0, 8.0, "pack", 1, "#ec4899", "TJ Hotdogs & Packs", 1, None, None, 15, "Processed Freezer"),
+    ("4800016002021", None, None, None, 1.0, "Vigan Garlic Longganisa 12s", 88.00, 110.00, 25.0, 5.0, "pack", 1, "#a855f7", "TJ Hotdogs & Packs", 1, None, None, 16, "Processed Freezer"),
+    ("4800016002038", None, None, None, 1.0, "Pork & Shrimp Siomai 20s", 110.00, 140.00, 30.0, 8.0, "pack", 1, "#10b981", "TJ Hotdogs & Packs", 1, None, None, 17, "Processed Freezer"),
+    ("4800016002045", None, None, None, 1.0, "Shoestring French Fries 1kg", 130.00, 165.00, 25.0, 5.0, "pack", 1, "#eab308", "TJ Hotdogs & Packs", 1, None, None, 18, "Processed Freezer"),
+
+    # ── 3. Dedicated Sanitary Ice Freezer ──
+    (None, None, None, None, 1.0, "Sanitary Purified Tube Ice (1kg)", 12.00, 20.00, 100.0, 20.0, "bag", 1, "#06b6d4", "Sanitary Ice Freezer", 1, None, None, 21, "Ice Freezer (Sanitary)"),
+    (None, None, None, None, 1.0, "Sanitary Tube Ice Block (2kg)", 22.00, 35.00, 60.0, 15.0, "bag", 1, "#0891b2", "Sanitary Ice Freezer", 1, None, None, 22, "Ice Freezer (Sanitary)"),
+    (None, None, None, None, 1.0, "Thermal Foil Insulation Bag", 22.00, 35.00, 50.0, 10.0, "pc", 1, "#64748b", "Cold Storage Bags", 1, None, None, 23, "Accessories"),
+
+    # ── 4. Chilled Exotic & Refreshing Drinks ──
+    ("4901777018815", None, None, None, 1.0, "Japanese Ramune Soda (Original)", 65.00, 85.00, 30.0, 6.0, "bottle", 1, "#38bdf8", "Chilled Drinks", 1, None, None, 31, "Drink Chiller"),
+    ("8801056012014", None, None, None, 1.0, "Korean Chilsung Cider 250ml", 32.00, 45.00, 48.0, 12.0, "can", 1, "#22c55e", "Chilled Drinks", 1, None, None, 32, "Drink Chiller"),
+    ("4901340010048", None, None, None, 1.0, "Calpis Sparkling Soda 350ml", 48.00, 65.00, 36.0, 8.0, "can", 1, "#60a5fa", "Chilled Drinks", 1, None, None, 33, "Drink Chiller"),
+    ("078000082404", None, None, None, 1.0, "Dr Pepper Cherry 355ml", 45.00, 60.00, 48.0, 12.0, "can", 1, "#991b1b", "Chilled Drinks", 1, None, None, 34, "Drink Chiller"),
+    ("078000083166", None, None, None, 1.0, "A&W Cream Soda 355ml", 45.00, 60.00, 36.0, 8.0, "can", 1, "#d97706", "Chilled Drinks", 1, None, None, 35, "Drink Chiller"),
+    ("8850370123456", None, None, None, 1.0, "ChaTraMue Thai Milk Tea Can", 55.00, 75.00, 30.0, 6.0, "can", 1, "#ea580c", "Chilled Drinks", 1, None, None, 36, "Drink Chiller"),
+    ("4901201012345", None, None, None, 1.0, "UCC Black Cold Coffee 185g", 52.00, 70.00, 40.0, 10.0, "can", 1, "#1e293b", "Chilled Drinks", 1, None, None, 37, "Drink Chiller"),
+    ("8935049500012", None, None, None, 1.0, "Basil Seed Drink with Mango 290ml", 48.00, 65.00, 30.0, 6.0, "bottle", 1, "#facc15", "Chilled Drinks", 1, None, None, 38, "Drink Chiller"),
+    ("4987035332510", None, None, None, 1.0, "Pocari Sweat Ion Water 500ml", 38.00, 50.00, 48.0, 12.0, "bottle", 1, "#0284c7", "Chilled Drinks", 1, None, None, 39, "Drink Chiller"),
 ]
 
 
@@ -265,6 +298,8 @@ async def init_db():
             "ALTER TABLE products ADD COLUMN pcs_per_pack INTEGER DEFAULT 1",
             "ALTER TABLE products ADD COLUMN bulk_cost_price REAL",
             "ALTER TABLE products ADD COLUMN full_pack_price REAL",
+            "ALTER TABLE products ADD COLUMN plu_code INTEGER",
+            "ALTER TABLE products ADD COLUMN freezer_section TEXT DEFAULT 'Frozen Main'",
             "ALTER TABLE gcash_transactions ADD COLUMN reference_number TEXT",
             "ALTER TABLE gcash_transactions ADD COLUMN mobile_number TEXT",
             "ALTER TABLE gcash_transactions ADD COLUMN receipt_image TEXT",
@@ -286,6 +321,7 @@ async def init_db():
         try:
             await db.execute("CREATE INDEX IF NOT EXISTS idx_products_pack_barcode ON products(pack_barcode)")
             await db.execute("CREATE INDEX IF NOT EXISTS idx_products_jar_code ON products(jar_code)")
+            await db.execute("CREATE INDEX IF NOT EXISTS idx_products_plu_code ON products(plu_code)")
         except Exception:
             pass
 
@@ -313,8 +349,8 @@ async def init_db():
             await db.executemany(
                 """INSERT INTO products
                    (barcode, pack_barcode, jar_code, refill_price, refill_qty, name, cost_price, selling_price, stock_qty,
-                    low_stock_threshold, unit, is_quick_item, quick_button_color, category, pcs_per_pack, bulk_cost_price, full_pack_price)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    low_stock_threshold, unit, is_quick_item, quick_button_color, category, pcs_per_pack, bulk_cost_price, full_pack_price, plu_code, freezer_section)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 SAMPLE_PRODUCTS
             )
 

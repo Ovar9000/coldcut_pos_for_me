@@ -25,6 +25,8 @@ export interface Product {
   default_price?: number
   default_subtotal?: number
   pack_label?: string | null
+  plu_code?: number | null
+  freezer_section?: string | null
 }
 
 export interface CartItem {

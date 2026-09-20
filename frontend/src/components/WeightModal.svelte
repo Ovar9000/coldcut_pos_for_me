@@ -84,18 +84,18 @@
 >
   <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden flex flex-col">
     <!-- Header -->
-    <div class="px-5 py-4 bg-emerald-700 text-white flex items-center justify-between">
+    <div class="px-5 py-4 bg-cyan-700 text-white flex items-center justify-between">
       <div class="flex items-center gap-2.5">
-        <Scale class="w-5 h-5 text-emerald-200" />
+        <Scale class="w-5 h-5 text-cyan-200" />
         <div>
           <h2 class="text-sm font-bold tracking-tight leading-tight">{product.name}</h2>
-          <p class="text-[11px] text-emerald-100 font-mono mt-0.5">Rate: ₱{pricePerKg.toFixed(2)} / {product.unit}</p>
+          <p class="text-[11px] text-cyan-100 font-mono mt-0.5">Rate: ₱{pricePerKg.toFixed(2)} / {product.unit}</p>
         </div>
       </div>
       <button
         type="button"
         onclick={onClose}
-        class="text-emerald-200 hover:text-white p-1 rounded-lg transition-colors"
+        class="text-cyan-200 hover:text-white p-1 rounded-lg transition-colors cursor-pointer"
       >
         <X class="w-5 h-5" />
       </button>
@@ -107,7 +107,7 @@
         <button
           type="button"
           onclick={() => { mode = 'weight'; setTimeout(() => inputWeightEl?.focus(), 50) }}
-          class="flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded-lg transition-all {mode === 'weight' ? 'bg-white text-emerald-800 shadow-xs' : 'text-slate-600 hover:text-slate-900'}"
+          class="flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer {mode === 'weight' ? 'bg-white text-cyan-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'}"
         >
           <Scale class="w-4 h-4" />
           <span>By Weight (kg)</span>
@@ -116,7 +116,7 @@
         <button
           type="button"
           onclick={() => { mode = 'peso'; setTimeout(() => inputPesoEl?.focus(), 50) }}
-          class="flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded-lg transition-all {mode === 'peso' ? 'bg-white text-emerald-800 shadow-xs' : 'text-slate-600 hover:text-slate-900'}"
+          class="flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer {mode === 'peso' ? 'bg-white text-cyan-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'}"
         >
           <Banknote class="w-4 h-4" />
           <span>By Peso Amount (₱)</span>
@@ -126,29 +126,29 @@
       {#if mode === 'weight'}
         <!-- Input by Weight -->
         <div>
-          <label for="weightInput" class="block text-xs font-bold text-slate-700 mb-1">Enter Exact Weight ({product.unit}):</label>
+          <label for="weightInput" class="block text-xs font-bold text-slate-700 mb-1">Enter Weighed Kilograms or Grams:</label>
           <div class="relative flex items-center">
             <input
               id="weightInput"
               bind:this={inputWeightEl}
               bind:value={weightVal}
               type="number"
-              step="0.05"
-              min="0.01"
-              class="w-full px-4 py-3 bg-slate-50 border-2 border-emerald-500 rounded-xl text-xl font-bold font-mono text-slate-900 focus:outline-none focus:bg-white"
+              step="0.005"
+              min="0.001"
+              class="w-full px-4 py-3 bg-slate-50 border-2 border-cyan-500 rounded-xl text-xl font-black font-mono text-slate-900 focus:outline-none focus:bg-white"
             />
             <span class="absolute right-4 text-xs font-bold text-slate-400 uppercase">{product.unit}</span>
           </div>
 
-          <!-- Quick Weight Pills -->
+          <!-- Quick Weight Pills for Butcher Cuts -->
           <div class="grid grid-cols-3 sm:grid-cols-6 gap-1.5 mt-2.5">
-            {#each [0.25, 0.5, 0.75, 1.0, 2.0, 5.0] as w}
+            {#each [0.25, 0.5, 0.75, 1.0, 1.5, 2.0] as w}
               <button
                 type="button"
                 onclick={() => setPresetWeight(w)}
-                class="py-1.5 text-xs font-bold rounded-lg border transition-all {parseFloat(weightVal) === w ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'}"
+                class="py-1.5 text-xs font-bold rounded-lg border transition-all cursor-pointer {parseFloat(weightVal) === w ? 'bg-cyan-600 text-white border-cyan-600 shadow-xs' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'}"
               >
-                {w === 0.25 ? '¼ kg' : w === 0.5 ? '½ kg' : w === 0.75 ? '¾ kg' : `${w} kg`}
+                {w === 0.25 ? '250g' : w === 0.5 ? '500g' : w === 0.75 ? '750g' : `${w} kg`}
               </button>
             {/each}
           </div>

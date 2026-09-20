@@ -52,18 +52,18 @@
 <header class="bg-white border-b border-slate-200 px-4 py-2.5 flex items-center justify-between shadow-xs z-10 select-none">
   <!-- Brand & Status -->
   <div class="flex items-center gap-3">
-    <div class="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold shadow-xs">
+    <div class="w-9 h-9 rounded-xl bg-cyan-600 text-white flex items-center justify-center font-bold shadow-xs">
       <Store class="w-5 h-5" />
     </div>
     <div>
       <div class="flex items-center gap-2">
-        <h1 class="text-sm font-bold text-slate-900 tracking-tight leading-none">Sari-Sari POS</h1>
-        <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-          SCAN READY
+        <h1 class="text-sm font-bold text-slate-900 tracking-tight leading-none">Coldcut POS</h1>
+        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-cyan-50 text-cyan-800 border border-cyan-200">
+          <span class="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse"></span>
+          ⚖️ DAHUA SCALE READY
         </span>
       </div>
-      <p class="text-[11px] text-slate-500 font-medium mt-0.5">High-Speed Terminal (Svelte 5)</p>
+      <p class="text-[11px] text-slate-500 font-medium mt-0.5">Poultry, Frozen Cuts, Ice & Chilled Drinks</p>
     </div>
   </div>
 
@@ -92,17 +92,6 @@
     >
       <BookOpen class="w-4 h-4 text-amber-600" />
       <span>Utang Ledger (F7)</span>
-    </button>
-
-    <!-- GCash Service Button -->
-    <button
-      type="button"
-      onclick={onOpenGCash}
-      class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-all shadow-2xs cursor-pointer"
-      title="GCash Cash-In & Cash-Out Transaction Scanner"
-    >
-      <Smartphone class="w-4 h-4 text-blue-600" />
-      <span>GCash Money</span>
     </button>
 
     <!-- Parked Carts Button -->

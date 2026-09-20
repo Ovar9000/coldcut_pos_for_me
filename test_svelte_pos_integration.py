@@ -37,9 +37,9 @@ def run_tests():
         resp = client.get("/")
         assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
         html_content = resp.text
-        assert "Sari-Sari POS — Cashier Terminal" in html_content
+        assert "Coldcut POS" in html_content
         assert '<div id="app"' in html_content
-        print("[+] Root '/' successfully serves Svelte 5 SPA index.html")
+        print("[+] Root '/' successfully serves Coldcut POS Svelte 5 SPA index.html")
 
         # 2. Extract and Test Asset Loading
         print("\n--- 2. Testing Compiled Asset Serving (/assets/...) ---")
@@ -61,52 +61,92 @@ def run_tests():
         assert len(css_resp.content) > 5000
         print(f"[+] Svelte 5 CSS bundle verified ({len(css_resp.content)} bytes) at {css_path}")
 
-        # 3. Test Scale Barcode Scanning API
-        print("\n--- 3. Testing EAN-13 Scale-Printed Barcode Resolution ---")
-        # Find or create a weighed product (e.g. Rice with unit 'kg')
-        quick_resp = client.get("/api/products/quick-items")
-        assert quick_resp.status_code == 200
-        items = quick_resp.json()
-        assert len(items) > 0
+        # 3. Test Shanghai Dahua Scale Barcode Resolution (Prefixes 03 & 21)
+        print("\n--- 3. Testing Shanghai Dahua & EAN-13 Scale Barcode Resolution ---")
+        # 3a. Dahua Prefix 03: PLU 00001 (Chicken Feet / Adidas), 485g (0.485kg)
+        dahua_code1 = "0300001004858"
+        scan1 = client.post(f"/api/smart-scan?scanned_code={dahua_code1}")
+        assert scan1.status_code == 200, f"Scan failed: {scan1.text}"
+        data1 = scan1.json()
+        assert data1["scan_type"] == "scale_weight"
+        assert "Adidas" in data1["product"]["name"] or "Chicken Feet" in data1["product"]["name"]
+        assert data1["quantity_to_add"] == 0.485
+        assert data1["effective_subtotal"] == round(0.485 * 160.0, 2)
+        print(f"[+] Dahua Scale (Prefix 03) {dahua_code1} decoded: '{data1['product']['name']}', Weight: {data1['quantity_to_add']}kg, Total: ₱{data1['effective_subtotal']:.2f}")
 
-        sample_prod = items[0]
-        prod_id = sample_prod["id"]
+        # 3b. Scale Prefix 21: PLU 00002 (Chicken Gizzard / Balun-balunan), 650g (0.650kg)
+        dahua_code2 = "2100002006505"
+        scan2 = client.post(f"/api/smart-scan?scanned_code={dahua_code2}")
+        assert scan2.status_code == 200, f"Scan failed: {scan2.text}"
+        data2 = scan2.json()
+        assert data2["scan_type"] == "scale_weight"
+        assert "Gizzard" in data2["product"]["name"] or "Balun-balunan" in data2["product"]["name"]
+        assert data2["quantity_to_add"] == 0.650
+        print(f"[+] Dahua Scale (Prefix 21) {dahua_code2} decoded: '{data2['product']['name']}', Weight: {data2['quantity_to_add']}kg, Total: ₱{data2['effective_subtotal']:.2f}")
 
-        # Formulate scale barcode: 21 + 5-digit PLU + 5-digit weight (0.750kg = 00750) + check
-        scale_barcode = f"21{prod_id:05d}007505"
-        scan_resp = client.post(f"/api/smart-scan?scanned_code={scale_barcode}")
-        assert scan_resp.status_code == 200, f"Scan failed: {scan_resp.text}"
-        scan_data = scan_resp.json()
-        assert "scale_" in scan_data["scan_type"]
-        assert scan_data["product"]["id"] == prod_id
-        print(f"[+] Scale Barcode {scale_barcode} decoded: Item '{scan_data['product']['name']}', Label: {scan_data['pack_label']}")
+        # 3c. User Photo Barcode Label (0328100 001308 -> PLU 13: TJ Cheesedog Jumbo 1kg)
+        dahua_photo_code = "0328100001308"
+        scan3 = client.post(f"/api/smart-scan?scanned_code={dahua_photo_code}")
+        assert scan3.status_code == 200, f"Scan failed: {scan3.text}"
+        data3 = scan3.json()
+        print(f"[+] User Scale Photo Barcode {dahua_photo_code} decoded: '{data3['product']['name']}' (PLU {data3['product'].get('plu_code')})")
 
-        # 4. Test Checkout with Weighed Portion and Change Calculation
-        print("\n--- 4. Testing POS Checkout with Cash & Change ---")
+        # 4. Test Mixed Coldcut POS Checkout: Weighed Chicken Cuts + TJ Hotdogs + Sanitary Ice + Chilled Drink
+        print("\n--- 4. Testing Mixed Coldcut POS Checkout (Poultry + Hotdog + Ice + Drink) ---")
+        items_resp = client.get("/api/products/quick-items")
+        assert items_resp.status_code == 200
+        catalog = items_resp.json()
+        
+        prod_adidas = next(p for p in catalog if "Adidas" in p["name"])
+        prod_tj = next(p for p in catalog if "TJ Hotdog Jumbo" in p["name"])
+        prod_ice = next(p for p in catalog if "Tube Ice" in p["name"])
+        prod_drink = next(p for p in catalog if "Ramune" in p["name"] or "Cider" in p["name"])
+
+        subtotal_adidas = round(0.485 * float(prod_adidas["selling_price"]), 2)
+        total_order = subtotal_adidas + float(prod_tj["selling_price"]) + float(prod_ice["selling_price"]) + float(prod_drink["selling_price"])
+
         checkout_payload = {
             "items": [
                 {
-                    "product_id": prod_id,
-                    "product_name": sample_prod["name"],
-                    "quantity": 0.75,
-                    "unit_price": float(sample_prod["selling_price"]),
-                    "cost_price": float(sample_prod.get("cost_price", 0)),
-                    "subtotal": round(0.75 * float(sample_prod["selling_price"]), 2),
-                    "pack_label": "Scale Weighed (0.750kg)"
+                    "product_id": prod_adidas["id"],
+                    "product_name": prod_adidas["name"],
+                    "quantity": 0.485,
+                    "unit_price": float(prod_adidas["selling_price"]),
+                    "cost_price": float(prod_adidas.get("cost_price", 0)),
+                    "subtotal": subtotal_adidas,
+                    "pack_label": "Scale Weighed (0.485kg)"
                 },
                 {
-                    "product_id": sample_prod["id"],
-                    "product_name": "Gasolina (1L Bote)",
+                    "product_id": prod_tj["id"],
+                    "product_name": prod_tj["name"],
                     "quantity": 1.0,
-                    "unit_price": 75.0,
-                    "cost_price": 60.0,
-                    "subtotal": 75.0,
-                    "pack_label": "1L Bote"
+                    "unit_price": float(prod_tj["selling_price"]),
+                    "cost_price": float(prod_tj.get("cost_price", 0)),
+                    "subtotal": float(prod_tj["selling_price"]),
+                    "pack_label": "1kg Jumbo Pack"
+                },
+                {
+                    "product_id": prod_ice["id"],
+                    "product_name": prod_ice["name"],
+                    "quantity": 1.0,
+                    "unit_price": float(prod_ice["selling_price"]),
+                    "cost_price": float(prod_ice.get("cost_price", 0)),
+                    "subtotal": float(prod_ice["selling_price"]),
+                    "pack_label": "Ice Freezer (Sanitary)"
+                },
+                {
+                    "product_id": prod_drink["id"],
+                    "product_name": prod_drink["name"],
+                    "quantity": 1.0,
+                    "unit_price": float(prod_drink["selling_price"]),
+                    "cost_price": float(prod_drink.get("cost_price", 0)),
+                    "subtotal": float(prod_drink["selling_price"]),
+                    "pack_label": "Chilled Drink"
                 }
             ],
-            "total_amount": round(0.75 * float(sample_prod["selling_price"]) + 75.0, 2),
+            "total_amount": round(total_order, 2),
             "payment_method": "CASH",
-            "amount_tendered": 200.0,
+            "amount_tendered": 500.0,
             "print_receipt": False
         }
 
@@ -114,10 +154,10 @@ def run_tests():
         assert checkout_resp.status_code == 200, f"Checkout failed: {checkout_resp.text}"
         txn = checkout_resp.json()
         assert txn["receipt_number"].startswith("TXN-")
-        expected_change = round(200.0 - checkout_payload["total_amount"], 2)
+        expected_change = round(500.0 - checkout_payload["total_amount"], 2)
         change_val = txn.get("change", txn.get("change_amount", 0))
         assert abs(change_val - expected_change) < 0.01
-        print(f"[+] Checkout successful: Receipt #{txn['receipt_number']}, Change: ₱{change_val:.2f}")
+        print(f"[+] Mixed Coldcut Sale complete: Receipt #{txn['receipt_number']}, Total: ₱{checkout_payload['total_amount']:.2f}, Sukli: ₱{change_val:.2f}")
 
         # 5. Test GCash Money Transaction Recording with Photo / Metadata
         print("\n--- 5. Testing GCash Transaction Recording with Photo & Metadata ---")
@@ -179,19 +219,19 @@ def run_tests():
         utang_checkout_payload = {
             "items": [
                 {
-                    "product_id": prod_id,
-                    "product_name": sample_prod["name"],
-                    "quantity": 2.0,
-                    "unit_price": 75.0,
-                    "cost_price": 50.0,
-                    "subtotal": 150.0,
-                    "pack_label": "2 units"
+                    "product_id": prod_tj["id"],
+                    "product_name": prod_tj["name"],
+                    "quantity": 1.0,
+                    "unit_price": 210.0,
+                    "cost_price": 175.0,
+                    "subtotal": 210.0,
+                    "pack_label": "1kg Jumbo Pack"
                 }
             ],
-            "total_amount": 150.0,
+            "total_amount": 210.0,
             "payment_method": "UTANG",
-            "amount_tendered": 50.0,
-            "amount_paid_now": 50.0,
+            "amount_tendered": 110.0,
+            "amount_paid_now": 110.0,
             "customer_name": test_debtor_name,
             "phone_number": "09189998888",
             "notes": "Partial cash downpayment",
