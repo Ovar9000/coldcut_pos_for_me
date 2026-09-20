@@ -24,10 +24,11 @@ function adminDashboard() {
     async loadDashboard() {
       this.isLoading = true;
       try {
+        const af = window.authFetch || fetch;
         const [reportRes, lowStockRes, txnRes] = await Promise.all([
-          fetch('/api/reports/daily'),
-          fetch('/api/products/low-stock'),
-          fetch('/api/transactions/today'),
+          af('/api/reports/daily'),
+          af('/api/products/low-stock'),
+          af('/api/transactions/today'),
         ]);
 
         if (reportRes.ok) this.report = await reportRes.json();
@@ -48,6 +49,7 @@ function adminDashboard() {
 
     logout() {
       sessionStorage.removeItem('admin_auth');
+      sessionStorage.removeItem('admin_token');
       window.location.href = '/admin';
     },
 

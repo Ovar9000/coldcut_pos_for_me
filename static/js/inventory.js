@@ -104,7 +104,8 @@ function inventoryApp() {
       this.scanNotification = '';
 
       try {
-        const res = await fetch(`/api/products/barcode/${encodeURIComponent(code)}`);
+        const af = window.authFetch || fetch;
+        const res = await af(`/api/products/barcode/${encodeURIComponent(code)}`);
 
         if (res.ok) {
           // ── Product FOUND ─────────────────────────────────────
@@ -190,7 +191,8 @@ function inventoryApp() {
       this.scanStatus = 'saving';
 
       try {
-        const res = await fetch(`/api/products/${this.quickPriceProduct.id}`, {
+        const af = window.authFetch || fetch;
+        const res = await af(`/api/products/${this.quickPriceProduct.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -338,7 +340,8 @@ function inventoryApp() {
 
     async loadProducts() {
       try {
-        const res = await fetch('/api/products');
+        const af = window.authFetch || fetch;
+        const res = await af('/api/products');
         if (!res.ok) throw new Error('Failed to load products');
         
         this.products = await res.json();
@@ -352,67 +355,102 @@ function inventoryApp() {
     },
 
     filterProducts() {
-      const query = this.searchQuery.toLowerCase().trim();
       this.filteredProducts = this.products.filter(p => {
-        const matchesSearch = !query || p.name.toLowerCase().includes(query) || (p.barcode && p.barcode.includes(query));
-        const matchesCat = !this.categoryFilter || p.category === this.categoryFilter;
-        return matchesSearch && matchesCat;
+        const matchesCategory = !this.categoryFilter || p.category === this.categoryFilter;
+        const q = this.searchQuery.toLowerCase();
+        const matchesSearch = !q || 
+          (p.name && p.name.toLowerCase().includes(q)) || 
+          (p.barcode && p.barcode.toLowerCase().includes(q)) ||
+          (p.pack_barcode && p.pack_barcode.toLowerCase().includes(q)) ||
+          (p.jar_code && p.jar_code.toLowerCase().includes(q));
+        return matchesCategory && matchesSearch;
       });
     },
 
     openAddModal() {
+      this.resetForm();
       this.isEditing = false;
       this.editingId = null;
-      this.resetForm();
       this.showModal = true;
+      this.$nextTick(() => {
+        const el = document.getElementById('form-name');
+        if (el) {
+          el.focus();
+          el.select();
+        }
+      });
     },
 
     openEditModal(product) {
       this.isEditing = true;
       this.editingId = product.id;
-      
-      // Load current values into form model
-      Object.keys(this.form).forEach(key => {
-        if (product[key] !== undefined) {
-          this.form[key] = product[key];
+      this.form = {
+        name: product.name,
+        category: product.category || 'General',
+        cost_price: product.cost_price,
+        selling_price: product.selling_price,
+        stock_qty: product.stock_qty,
+        low_stock_threshold: product.low_stock_threshold,
+        unit: product.unit || 'pc',
+        barcode: product.barcode || '',
+        pack_barcode: product.pack_barcode || '',
+        jar_code: product.jar_code || '',
+        refill_price: product.refill_price !== null && product.refill_price !== undefined ? product.refill_price : '',
+        refill_qty: product.refill_qty !== null && product.refill_qty !== undefined ? product.refill_qty : 1.0,
+        is_quick_item: !!product.is_quick_item,
+        quick_button_color: product.quick_button_color || '#10b981',
+        pcs_per_pack: product.pcs_per_pack || 1,
+        bulk_cost_price: product.bulk_cost_price !== null && product.bulk_cost_price !== undefined ? product.bulk_cost_price : '',
+        full_pack_price: product.full_pack_price !== null && product.full_pack_price !== undefined ? product.full_pack_price : ''
+      };
+      this.showModal = true;
+      this.$nextTick(() => {
+        const el = document.getElementById('form-name');
+        if (el) {
+          el.focus();
+          el.select();
         }
       });
-      this.showModal = true;
     },
 
     async saveProduct() {
       if (!this.form.name || !this.form.name.trim()) {
-        alert('Please enter a Product Name before saving.');
-        return;
-      }
-      const sellPrice = parseFloat(this.form.selling_price) || 0;
-      if (sellPrice <= 0) {
-        alert('Please enter a valid Selling Price (> ₱0.00) before saving.');
+        alert('Product name is required.');
         return;
       }
 
-      const url = this.isEditing ? `/api/products/${this.editingId}` : '/api/products';
-      const method = this.isEditing ? 'PUT' : 'POST';
+      const sellPrice = parseFloat(this.form.selling_price);
+      if (isNaN(sellPrice) || sellPrice < 0) {
+        alert('Please enter a valid non-negative selling price.');
+        return;
+      }
 
       try {
+        const method = this.isEditing ? 'PUT' : 'POST';
+        const url = this.isEditing ? `/api/products/${this.editingId}` : '/api/products';
+        
         const body = {
-          ...this.form,
           name: this.form.name.trim(),
           cost_price: parseFloat(this.form.cost_price) || 0,
           selling_price: sellPrice,
           stock_qty: parseFloat(this.form.stock_qty) || 0,
           low_stock_threshold: parseFloat(this.form.low_stock_threshold) || 0,
+          unit: this.form.unit || 'pc',
+          category: this.form.category || 'General',
           barcode: this.form.barcode && this.form.barcode.trim() ? this.form.barcode.trim() : null,
           pack_barcode: this.form.pack_barcode && this.form.pack_barcode.trim() ? this.form.pack_barcode.trim() : null,
           jar_code: this.form.jar_code && this.form.jar_code.trim() ? this.form.jar_code.trim() : null,
           refill_price: this.form.refill_price !== '' && this.form.refill_price !== null ? parseFloat(this.form.refill_price) : null,
           refill_qty: this.form.refill_qty !== '' && this.form.refill_qty !== null ? parseFloat(this.form.refill_qty) : 1.0,
+          is_quick_item: !!this.form.is_quick_item,
+          quick_button_color: this.form.quick_button_color || '#10b981',
           pcs_per_pack: parseInt(this.form.pcs_per_pack) || 1,
           bulk_cost_price: this.form.bulk_cost_price !== '' && this.form.bulk_cost_price !== null ? parseFloat(this.form.bulk_cost_price) : null,
           full_pack_price: this.form.full_pack_price !== '' && this.form.full_pack_price !== null ? parseFloat(this.form.full_pack_price) : null
         };
 
-        const res = await fetch(url, {
+        const af = window.authFetch || fetch;
+        const res = await af(url, {
           method,
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body)
@@ -442,7 +480,8 @@ function inventoryApp() {
       if (!this.deleteTarget) return;
 
       try {
-        const res = await fetch(`/api/products/${this.deleteTarget.id}`, {
+        const af = window.authFetch || fetch;
+        const res = await af(`/api/products/${this.deleteTarget.id}`, {
           method: 'DELETE'
         });
 
@@ -485,8 +524,8 @@ function inventoryApp() {
 
     logout() {
       sessionStorage.removeItem('admin_auth');
+      sessionStorage.removeItem('admin_token');
       window.location.href = '/admin';
     }
   };
 }
-

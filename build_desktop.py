@@ -40,7 +40,6 @@ def build():
         "--name=SariSariPOS",
         f"--add-data={PROJECT_ROOT / 'templates'};templates",
         f"--add-data={PROJECT_ROOT / 'static'};static",
-        f"--add-data={PROJECT_ROOT / 'data'};data",
         "--hidden-import=uvicorn.logging",
         "--hidden-import=uvicorn.loops",
         "--hidden-import=uvicorn.loops.auto",

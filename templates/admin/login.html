@@ -34,6 +34,7 @@
         const result = await res.json();
         if (result.success) {
           sessionStorage.setItem('admin_auth', 'true');
+          sessionStorage.setItem('admin_token', result.token);
           window.location.href = '/admin/dashboard';
         } else {
           this.error = result.message || 'Incorrect password';

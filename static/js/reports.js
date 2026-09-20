@@ -36,7 +36,8 @@ function reportsApp() {
 
     async loadDailyReport() {
       try {
-        const res = await fetch(`/api/reports/daily?date=${this.dailyDate}`);
+        const af = window.authFetch || fetch;
+        const res = await af(`/api/reports/daily?date=${this.dailyDate}`);
         if (res.ok) {
           this.dailyReport = await res.json();
         }
@@ -47,7 +48,8 @@ function reportsApp() {
 
     async loadMonthlyReport() {
       try {
-        const res = await fetch(`/api/reports/monthly?year=${this.monthlyYear}&month=${this.monthlyMonth}`);
+        const af = window.authFetch || fetch;
+        const res = await af(`/api/reports/monthly?year=${this.monthlyYear}&month=${this.monthlyMonth}`);
         if (res.ok) {
           this.monthlyReport = await res.json();
         }
@@ -58,7 +60,8 @@ function reportsApp() {
 
     async loadTopProducts() {
       try {
-        const res = await fetch(`/api/reports/top-products?period=${this.topPeriod}&sort_by=${this.topSortBy}&limit=${this.topLimit}`);
+        const af = window.authFetch || fetch;
+        const res = await af(`/api/reports/top-products?period=${this.topPeriod}&sort_by=${this.topSortBy}&limit=${this.topLimit}`);
         if (res.ok) {
           this.topProducts = await res.json();
           
@@ -100,6 +103,7 @@ function reportsApp() {
 
     logout() {
       sessionStorage.removeItem('admin_auth');
+      sessionStorage.removeItem('admin_token');
       window.location.href = '/admin';
     }
   };

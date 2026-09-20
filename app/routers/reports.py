@@ -15,6 +15,7 @@ Reports are critical for sari-sari store owners to track:
 from datetime import date, datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from app.database import get_db
+from app.auth import verify_admin_token
 
 router = APIRouter()
 
@@ -125,7 +126,8 @@ async def daily_report(
 async def monthly_report(
     year: int = Query(None, description="Year (YYYY). Defaults to current year."),
     month: int = Query(None, description="Month (1-12). Defaults to current month."),
-    db=Depends(get_db)
+    db=Depends(get_db),
+    _admin=Depends(verify_admin_token)
 ):
     """
     Generate a monthly income report.
@@ -215,7 +217,8 @@ async def top_products(
     period: str = Query("day", description="Time period: 'day', 'month', or 'all'"),
     limit: int = Query(10, ge=1, le=100, description="Number of top products to return"),
     sort_by: str = Query("quantity", description="Sort by: 'quantity', 'revenue', or 'profit'"),
-    db=Depends(get_db)
+    db=Depends(get_db),
+    _admin=Depends(verify_admin_token)
 ):
     """
     Get top-selling products ranked by quantity, revenue, or profit.

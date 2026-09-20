@@ -26,7 +26,8 @@ function labelsApp() {
 
     async loadItems() {
       try {
-        const res = await fetch('/api/admin/labels');
+        const af = window.authFetch || fetch;
+        const res = await af('/api/admin/labels');
         if (res.ok) {
           this.labelItems = await res.json();
           this.$nextTick(() => {
@@ -88,7 +89,8 @@ function labelsApp() {
           full_pack_price: this.editForm.full_pack_price ? parseFloat(this.editForm.full_pack_price) : null,
         };
 
-        const res = await fetch(`/api/products/${this.editForm.id}`, {
+        const af = window.authFetch || fetch;
+        const res = await af(`/api/products/${this.editForm.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)

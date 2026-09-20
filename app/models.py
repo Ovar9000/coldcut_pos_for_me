@@ -117,24 +117,24 @@ class CartItem(BaseModel):
     """A single item in the cashier's cart."""
     product_id: int
     product_name: str
-    quantity: float = 1.0               # Decimal for weighted / refill items or pcs
-    unit_price: float
-    cost_price: float = 0
-    subtotal: float                     # quantity * unit_price
+    quantity: float = Field(gt=0, description="Quantity must be strictly positive")
+    unit_price: float = Field(ge=0, description="Unit price cannot be negative")
+    cost_price: float = Field(default=0, ge=0)
+    subtotal: float = Field(ge=0)
     pack_label: Optional[str] = None    # E.g. 'Full-Pack (10pcs)', 'Jar Refill'
 
 
 class TransactionCreate(BaseModel):
     """Schema for submitting a completed sale (supports CASH, GCASH, and atomic UTANG)."""
     items: List[CartItem]
-    total_amount: float
+    total_amount: float = Field(ge=0, description="Total amount cannot be negative")
     payment_method: str = "CASH"        # 'CASH', 'GCASH', or 'UTANG'
-    amount_tendered: float = 0          # Cash given by customer
+    amount_tendered: float = Field(default=0, ge=0)  # Cash given by customer
     print_receipt: bool = False
     customer_name: Optional[str] = None # Required if payment_method is UTANG
     phone_number: Optional[str] = None  # Optional customer phone
     notes: Optional[str] = None         # Optional transaction memo
-    amount_paid_now: Optional[float] = 0 # For partial cash payments on Utang
+    amount_paid_now: Optional[float] = Field(default=0, ge=0) # For partial cash payments on Utang
 
 
 class TransactionResponse(BaseModel):

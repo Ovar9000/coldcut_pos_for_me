@@ -18,8 +18,8 @@ function syncApp() {
       last_supabase_sync: 'Never'
     },
     supabase: {
-      url: 'https://dveufoeavxegvcgityax.supabase.co',
-      key: 'sb_publishable_HRsrNqo7SMk_H90617TQ3Q_VJqZR5KC',
+      url: '',
+      key: '',
       bucket: 'store-backups'
     },
     config: {
@@ -39,13 +39,21 @@ function syncApp() {
       }
       await this.loadStatus();
       await this.loadConfig();
-      await this.testSupabase(true); // background silent test
-      await this.loadSupabaseBackups();
+      if (this.supabase.url && this.supabase.key) {
+        await this.testSupabase(true); // background silent test
+        await this.loadSupabaseBackups();
+      }
+    },
+
+    downloadDb() {
+      const token = sessionStorage.getItem('admin_token') || '';
+      window.location.href = '/api/sync/download-db?token=' + encodeURIComponent(token);
     },
 
     async loadStatus() {
       try {
-        const res = await fetch('/api/sync/status');
+        const af = window.authFetch || fetch;
+        const res = await af('/api/sync/status');
         if (res.ok) {
           this.status = await res.json();
           if (this.status.supabase_url) this.supabase.url = this.status.supabase_url;
@@ -58,7 +66,8 @@ function syncApp() {
 
     async loadConfig() {
       try {
-        const res = await fetch('/api/admin/settings');
+        const af = window.authFetch || fetch;
+        const res = await af('/api/admin/settings');
         if (res.ok) {
           const settings = await res.json();
           this.config.endpoint = settings.cloud_sync_endpoint || '';
@@ -74,12 +83,13 @@ function syncApp() {
 
     async saveConfig() {
       try {
-        await fetch('/api/admin/settings', {
+        const af = window.authFetch || fetch;
+        await af('/api/admin/settings', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ key: 'cloud_sync_endpoint', value: this.config.endpoint.trim() })
         });
-        await fetch('/api/admin/settings', {
+        await af('/api/admin/settings', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ key: 'cloud_api_key', value: this.config.apiKey.trim() })
@@ -93,7 +103,8 @@ function syncApp() {
 
     async saveSupabaseConfig() {
       try {
-        const res = await fetch('/api/sync/supabase/config', {
+        const af = window.authFetch || fetch;
+        const res = await af('/api/sync/supabase/config', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -118,7 +129,8 @@ function syncApp() {
     async testSupabase(silent = false) {
       this.isTestingSupabase = true;
       try {
-        const res = await fetch('/api/sync/supabase/test', { method: 'POST' });
+        const af = window.authFetch || fetch;
+        const res = await af('/api/sync/supabase/test', { method: 'POST' });
         const data = await res.json();
         this.supabaseConnected = data.connected === true;
         if (!silent) {
@@ -143,7 +155,8 @@ function syncApp() {
     async uploadToSupabase() {
       this.isUploadingSupabase = true;
       try {
-        const res = await fetch('/api/sync/supabase/upload-backup', { method: 'POST' });
+        const af = window.authFetch || fetch;
+        const res = await af('/api/sync/supabase/upload-backup', { method: 'POST' });
         const data = await res.json();
         if (res.ok && data.success) {
           alert('✅ ' + data.message);
@@ -161,7 +174,8 @@ function syncApp() {
 
     async loadSupabaseBackups() {
       try {
-        const res = await fetch('/api/sync/supabase/backups');
+        const af = window.authFetch || fetch;
+        const res = await af('/api/sync/supabase/backups');
         if (res.ok) {
           const list = await res.json();
           this.supabaseBackups = Array.isArray(list) ? list : [];
@@ -178,7 +192,8 @@ function syncApp() {
       }
       this.isSyncing = true;
       try {
-        const res = await fetch('/api/sync/push-to-cloud', { method: 'POST' });
+        const af = window.authFetch || fetch;
+        const res = await af('/api/sync/push-to-cloud', { method: 'POST' });
         const data = await res.json();
         if (res.ok) {
           alert('Success: ' + data.message);

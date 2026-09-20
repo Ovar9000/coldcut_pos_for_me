@@ -225,10 +225,9 @@ DEFAULT_SETTINGS = {
     "scale_type": "dahua",
     "cloud_sync_enabled": "0",
     "cloud_sync_endpoint": "",
-    "cloud_api_key": "",
-    "supabase_url": "https://dveufoeavxegvcgityax.supabase.co",
-    "supabase_key": "sb_publishable_HRsrNqo7SMk_H90617TQ3Q_VJqZR5KC",
-    "supabase_bucket": "store-backups",
+    "supabase_url": os.environ.get("NEXT_PUBLIC_SUPABASE_URL", ""),
+    "supabase_key": os.environ.get("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", ""),
+    "supabase_bucket": os.environ.get("SUPABASE_BUCKET", "store-backups"),
     "last_supabase_sync": "Never"
 }
 

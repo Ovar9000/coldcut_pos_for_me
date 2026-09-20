@@ -34,11 +34,14 @@ if __name__ == "__main__":
     print("  Press Ctrl+C to stop the server")
     print("=" * 50)
 
+    host = os.environ.get("POS_HOST", "127.0.0.1")
+    port = int(os.environ.get("POS_PORT", 8000))
+
     # Start the FastAPI server
     uvicorn.run(
         "app.main:app",
-        host="0.0.0.0",
-        port=8000,
+        host=host,
+        port=port,
         reload=True,       # Auto-reload on backend changes
         log_level="info",
     )

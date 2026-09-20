@@ -13,6 +13,7 @@ import secrets
 from fastapi import APIRouter, Depends, HTTPException, Query, Header
 from app.database import get_db, hash_password, verify_password
 from app.models import ProductCreate, ProductUpdate, AdminLoginRequest, SettingUpdate, AdminAuthResponse
+from app.auth import verify_admin_token
 
 router = APIRouter()
 
@@ -95,7 +96,7 @@ async def get_product(id: int, db=Depends(get_db)):
 
 
 @router.post("/products")
-async def create_product(data: ProductCreate, db=Depends(get_db)):
+async def create_product(data: ProductCreate, db=Depends(get_db), _admin=Depends(verify_admin_token)):
     """Create a new product with dual barcode and jar refill QR support."""
     if not data.name or not data.name.strip():
         raise HTTPException(status_code=400, detail="Product name cannot be empty.")
@@ -155,7 +156,7 @@ async def create_product(data: ProductCreate, db=Depends(get_db)):
 
 
 @router.put("/products/{id}")
-async def update_product(id: int, data: ProductUpdate, db=Depends(get_db)):
+async def update_product(id: int, data: ProductUpdate, db=Depends(get_db), _admin=Depends(verify_admin_token)):
     """Update an existing product."""
     cursor = await db.execute("SELECT * FROM products WHERE id = ?", (id,))
     existing = await cursor.fetchone()
@@ -207,7 +208,7 @@ async def update_product(id: int, data: ProductUpdate, db=Depends(get_db)):
 
 
 @router.delete("/products/{id}")
-async def delete_product(id: int, db=Depends(get_db)):
+async def delete_product(id: int, db=Depends(get_db), _admin=Depends(verify_admin_token)):
     """Delete a product while preserving historical line items."""
     cursor = await db.execute("SELECT * FROM products WHERE id = ?", (id,))
     row = await cursor.fetchone()
@@ -226,7 +227,7 @@ async def delete_product(id: int, db=Depends(get_db)):
 # ═══════════════════════════════════════════════════════════════
 
 @router.get("/admin/labels")
-async def list_printable_labels(db=Depends(get_db)):
+async def list_printable_labels(db=Depends(get_db), _admin=Depends(verify_admin_token)):
     """
     Get all products configured with Jar QR codes or Mother-Pack barcodes
     for generating 58mm thermal sticker labels.
@@ -278,7 +279,7 @@ async def admin_login(data: AdminLoginRequest, db=Depends(get_db)):
 
 
 @router.get("/admin/settings")
-async def get_admin_settings(db=Depends(get_db)):
+async def get_admin_settings(db=Depends(get_db), _admin=Depends(verify_admin_token)):
     """Get all admin settings."""
     cursor = await db.execute("SELECT key, value FROM admin_settings")
     rows = await cursor.fetchall()
@@ -293,7 +294,7 @@ async def get_admin_settings(db=Depends(get_db)):
 
 
 @router.put("/admin/settings")
-async def update_admin_setting(data: SettingUpdate, db=Depends(get_db)):
+async def update_admin_setting(data: SettingUpdate, db=Depends(get_db), _admin=Depends(verify_admin_token)):
     """Update an admin setting. Hashes admin_password if being changed."""
     if not data.key or not data.key.strip():
         raise HTTPException(status_code=400, detail="Setting key cannot be empty.")

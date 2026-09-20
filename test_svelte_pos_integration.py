@@ -159,8 +159,10 @@ def run_tests():
         assert abs(change_val - expected_change) < 0.01
         print(f"[+] Mixed Coldcut Sale complete: Receipt #{txn['receipt_number']}, Total: ₱{checkout_payload['total_amount']:.2f}, Sukli: ₱{change_val:.2f}")
 
-        # 5. Test GCash Money Transaction Recording with Photo / Metadata
+        # 5. Test GCash Money Transaction Recording with Photo / Metadata & Anti-Replay
         print("\n--- 5. Testing GCash Transaction Recording with Photo & Metadata ---")
+        import uuid
+        test_ref = f"50425{uuid.uuid4().int % 10000000:07d}"
         gcash_payload = {
             "transaction_type": "GCASH_OUT",
             "flow_type": "B",
@@ -168,7 +170,7 @@ def run_tests():
             "principal_amount": 990.0,
             "fee": 10.0,
             "total_collected": 1000.0,
-            "reference_number": "504250429508",
+            "reference_number": test_ref,
             "mobile_number": "09171234567",
             "receipt_image": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
             "gcash_timestamp": "Sep 21, 2026, 12:15 AM"
@@ -178,7 +180,12 @@ def run_tests():
         g_data = gcash_resp.json()
         assert g_data["transaction"]["id"] > 0
         assert g_data["gcash_detail"]["id"] > 0
-        print(f"[+] GCash Cash-Out recorded successfully: Txn ID {g_data['transaction']['id']}, Ref: 504250429508, Fee: ₱10.00")
+        print(f"[+] GCash Cash-Out recorded successfully: Txn ID {g_data['transaction']['id']}, Ref: {test_ref}, Fee: ₱10.00")
+
+        # 5b. Verify Anti-Replay: Duplicate Reference Number must return 409 Conflict
+        dup_resp = client.post("/api/gcash/transact", json=gcash_payload)
+        assert dup_resp.status_code == 409, f"Expected 409 for duplicate reference, got {dup_resp.status_code}"
+        print(f"[+] Anti-Replay verified: Duplicate GCash reference '{test_ref}' correctly rejected with 409.")
 
         # 6. Test Utang (Customer Credit / Palista) Full Lifecycle
         print("\n--- 6. Testing Utang (Customer Credit) Full Lifecycle & Ledger ---")

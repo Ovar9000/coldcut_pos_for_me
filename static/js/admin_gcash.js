@@ -28,7 +28,8 @@ function adminGcashApp() {
 
     async loadTransactions() {
       try {
-        const res = await fetch('/api/gcash/transactions');
+        const af = window.authFetch || fetch;
+        const res = await af('/api/gcash/transactions');
         if (!res.ok) throw new Error('Failed to load GCash transaction database.');
         
         this.transactions = await res.json();
@@ -92,6 +93,7 @@ function adminGcashApp() {
 
     logout() {
       sessionStorage.removeItem('admin_auth');
+      sessionStorage.removeItem('admin_token');
       window.location.href = '/admin';
     }
   };

@@ -18,6 +18,7 @@ from pydantic import BaseModel
 from typing import Optional
 from app.database import get_db, DB_PATH
 from app.services.supabase_sync import supabase_service
+from app.auth import verify_admin_token
 
 router = APIRouter(prefix="/api/sync", tags=["Cloud Sync"])
 
@@ -29,7 +30,7 @@ class SupabaseConfigRequest(BaseModel):
 
 
 @router.get("/status")
-async def get_sync_status(db=Depends(get_db)):
+async def get_sync_status(db=Depends(get_db), _admin=Depends(verify_admin_token)):
     """Get local database size, transaction counts, and cloud sync status."""
     db_size = 0
     if os.path.exists(DB_PATH):
@@ -81,8 +82,8 @@ async def get_sync_status(db=Depends(get_db)):
 
 
 @router.get("/export-json")
-async def export_database_json(db=Depends(get_db)):
-    """Export all store data to a portable JSON backup payload."""
+async def export_database_json(db=Depends(get_db), _admin=Depends(verify_admin_token)):
+    """Export all store data to a portable JSON backup payload (redacting sensitive keys)."""
     payload = {
         "version": "1.0",
         "exported_at": datetime.now().isoformat(),
@@ -94,7 +95,12 @@ async def export_database_json(db=Depends(get_db)):
         try:
             cursor = await db.execute(f"SELECT * FROM {tbl}")
             rows = await cursor.fetchall()
-            payload["tables"][tbl] = [dict(r) for r in rows]
+            row_dicts = [dict(r) for r in rows]
+            if tbl == "admin_settings":
+                for r in row_dicts:
+                    if r.get("key") in ("admin_password", "cloud_api_key", "supabase_key"):
+                        r["value"] = "***REDACTED***"
+            payload["tables"][tbl] = row_dicts
         except Exception:
             payload["tables"][tbl] = []
 
@@ -102,7 +108,7 @@ async def export_database_json(db=Depends(get_db)):
 
 
 @router.get("/download-db")
-async def download_sqlite_db():
+async def download_sqlite_db(_admin=Depends(verify_admin_token)):
     """Download the raw SQLite database file for 1-click physical backup."""
     if not os.path.exists(DB_PATH):
         raise HTTPException(status_code=404, detail="Database file not found.")
@@ -116,7 +122,7 @@ async def download_sqlite_db():
 
 
 @router.post("/push-to-cloud")
-async def push_to_cloud(db=Depends(get_db)):
+async def push_to_cloud(db=Depends(get_db), _admin=Depends(verify_admin_token)):
     """
     Push local database snapshot to the configured Cloud Web Portal.
     Allows store owner to view real-time sales and reports on their phone.
@@ -162,14 +168,14 @@ async def push_to_cloud(db=Depends(get_db)):
 # ═══════════════════════════════════════════════════════════════
 
 @router.post("/supabase/test")
-async def test_supabase_connection():
+async def test_supabase_connection(_admin=Depends(verify_admin_token)):
     """Test connectivity and authentication with Supabase."""
     res = await supabase_service.test_connection()
     return res
 
 
 @router.post("/supabase/upload-backup")
-async def upload_backup_to_supabase(db=Depends(get_db)):
+async def upload_backup_to_supabase(db=Depends(get_db), _admin=Depends(verify_admin_token)):
     """
     Directly upload the active SQLite store.db snapshot to Supabase Storage.
     Creates an encrypted, timestamped off-site cloud backup.
@@ -183,13 +189,13 @@ async def upload_backup_to_supabase(db=Depends(get_db)):
 
 
 @router.get("/supabase/backups")
-async def get_supabase_backups():
+async def get_supabase_backups(_admin=Depends(verify_admin_token)):
     """List all backups stored in the Supabase Storage bucket."""
     return await supabase_service.list_backups()
 
 
 @router.post("/supabase/config")
-async def save_supabase_config(req: SupabaseConfigRequest, db=Depends(get_db)):
+async def save_supabase_config(req: SupabaseConfigRequest, db=Depends(get_db), _admin=Depends(verify_admin_token)):
     """Save Supabase URL, Publishable Key, and Bucket name."""
     clean_url = req.url.strip().rstrip("/")
     clean_key = req.key.strip()

@@ -12,6 +12,23 @@
   <!-- Google Fonts: Inter -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/css/custom.css">
+  <script>
+    // Global authenticated fetch helper for admin panel
+    window.authFetch = function(url, options = {}) {
+      const token = sessionStorage.getItem('admin_token') || '';
+      const headers = Object.assign({}, options.headers || {}, {
+        'Authorization': `Bearer ${token}`
+      });
+      return fetch(url, Object.assign({}, options, { headers })).then(res => {
+        if (res.status === 401) {
+          sessionStorage.removeItem('admin_auth');
+          sessionStorage.removeItem('admin_token');
+          window.location.href = '/admin';
+        }
+        return res;
+      });
+    };
+  </script>
 
   {% block extra_head %}{% endblock %}
 </head>

@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.database import get_db
 from app.models import GCashCalculateRequest, GCashCalculateResponse, GCashTransactRequest
 from app.services.gcash_engine import calculate_gcash
+from app.auth import verify_admin_token
 
 router = APIRouter()
 
@@ -101,6 +102,28 @@ async def gcash_transact(data: GCashTransactRequest, db=Depends(get_db)):
             detail="transaction_type must be 'GCASH_IN' or 'GCASH_OUT'."
         )
 
+    if data.input_amount <= 0:
+        raise HTTPException(status_code=400, detail="Input amount must be greater than 0.")
+
+    # ── Server-Side Financial Recalculation & Validation ───────────────
+    calculated = calculate_gcash(data.input_amount, data.flow_type)
+    verified_principal = calculated["principal_amount"]
+    verified_fee = calculated["fee"]
+    verified_total = calculated["total_collected"]
+
+    # ── Anti-Replay: Verify GCash Reference Number Uniqueness ─────────
+    clean_ref = data.reference_number.strip() if data.reference_number else None
+    if clean_ref:
+        ref_check = await db.execute(
+            "SELECT id FROM gcash_transactions WHERE reference_number = ?",
+            (clean_ref,)
+        )
+        if await ref_check.fetchone():
+            raise HTTPException(
+                status_code=409,
+                detail=f"Duplicate transaction: GCash reference number '{clean_ref}' has already been recorded."
+            )
+
     # ── Insert into main transactions table ──────────────────────────
     # total_cost is 0 for GCash (no COGS — it's a service, not product sale)
     cursor = await db.execute(
@@ -109,7 +132,7 @@ async def gcash_transact(data: GCashTransactRequest, db=Depends(get_db)):
            VALUES (?, ?, ?, ?, ?)""",
         (
             data.transaction_type,
-            round(data.total_collected, 2),
+            verified_total,
             0,                              # No cost of goods for GCash
             "GCASH",
             0                               # Receipt printing handled separately
@@ -127,10 +150,10 @@ async def gcash_transact(data: GCashTransactRequest, db=Depends(get_db)):
             transaction_id,
             data.flow_type.upper(),
             round(data.input_amount, 2),
-            round(data.principal_amount, 2),
-            round(data.fee, 2),
-            round(data.total_collected, 2),
-            data.reference_number,
+            verified_principal,
+            verified_fee,
+            verified_total,
+            clean_ref,
             data.mobile_number,
             data.receipt_image,
             data.gcash_timestamp
@@ -162,7 +185,7 @@ async def gcash_transact(data: GCashTransactRequest, db=Depends(get_db)):
 
 
 @router.get("/gcash/transactions")
-async def list_gcash_transactions(db=Depends(get_db)):
+async def list_gcash_transactions(db=Depends(get_db), _admin=Depends(verify_admin_token)):
     """
     List all GCash transactions recorded in the system.
     """

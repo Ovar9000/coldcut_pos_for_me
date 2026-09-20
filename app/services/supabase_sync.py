@@ -45,12 +45,14 @@ class SupabaseSyncService:
         self.url = (
             os.environ.get("NEXT_PUBLIC_SUPABASE_URL")
             or env_vars.get("NEXT_PUBLIC_SUPABASE_URL")
-            or "https://dveufoeavxegvcgityax.supabase.co"
+            or ""
         ).rstrip("/")
         self.key = (
-            os.environ.get("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY")
+            os.environ.get("SUPABASE_SECRET_KEY")
+            or env_vars.get("SUPABASE_SECRET_KEY")
+            or os.environ.get("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY")
             or env_vars.get("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY")
-            or "sb_publishable_HRsrNqo7SMk_H90617TQ3Q_VJqZR5KC"
+            or ""
         )
         self.bucket = (
             os.environ.get("SUPABASE_BUCKET")
