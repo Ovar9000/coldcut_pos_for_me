@@ -1,0 +1,637 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Inventory Management - Sari-Sari Store POS{% endblock %}
+{% block alpine_app %}x-data="inventoryApp()"{% endblock %}
+
+{% block extra_head %}
+  <script src="/static/js/inventory.js"></script>
+  <style>
+    /* ── Scan & Quick Price Animations ──────────────────────── */
+    @keyframes scanPulseLight {
+      0%, 100% {
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.20),
+                    0 0 15px rgba(59, 130, 246, 0.06);
+      }
+      50% {
+        box-shadow: 0 0 0 5px rgba(59, 130, 246, 0.35),
+                    0 0 25px rgba(59, 130, 246, 0.12);
+      }
+    }
+
+    #scan-price-input:focus {
+      animation: scanPulseLight 2s ease-in-out infinite;
+      border-color: #3b82f6;
+      outline: none;
+    }
+
+    @keyframes slideDown {
+      from {
+        opacity: 0;
+        transform: translateY(-12px) scale(0.98);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    .quick-price-card {
+      animation: slideDown 0.3s ease-out;
+    }
+
+    @keyframes flashGreen {
+      0% { background-color: rgba(16, 185, 129, 0.15); }
+      100% { background-color: transparent; }
+    }
+
+    @keyframes flashAmber {
+      0% { background-color: rgba(245, 158, 11, 0.15); }
+      100% { background-color: transparent; }
+    }
+
+    .scan-flash-found {
+      animation: flashGreen 0.8s ease-out;
+    }
+
+    .scan-flash-new {
+      animation: flashAmber 0.8s ease-out;
+    }
+
+    /* ── Margin indicator colors ────────────────────────────── */
+    .margin-positive { color: #059669; }
+    .margin-negative { color: #dc2626; }
+    .margin-zero { color: #6b7280; }
+
+    /* ── Scan status dot ───────────────────────────────────── */
+    @keyframes dotPulse {
+      0%, 100% { opacity: 0.5; transform: scale(0.9); }
+      50% { opacity: 1; transform: scale(1.2); }
+    }
+
+    .scan-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+      flex-shrink: 0;
+    }
+
+    .scan-dot.ready {
+      background: #3b82f6;
+      animation: dotPulse 2s ease-in-out infinite;
+    }
+
+    .scan-dot.found {
+      background: #10b981;
+      animation: none;
+    }
+
+    .scan-dot.not-found {
+      background: #f59e0b;
+      animation: none;
+    }
+
+    .scan-dot.saving {
+      background: #8b5cf6;
+      animation: dotPulse 0.5s ease-in-out infinite;
+    }
+
+    /* ── Session badge ─────────────────────────────────────── */
+    .session-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: 9999px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      background: rgba(59, 130, 246, 0.1);
+      color: #3b82f6;
+      border: 1px solid rgba(59, 130, 246, 0.2);
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+    <!-- Header Section -->
+    <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+      <div>
+        <h1 class="text-3xl font-extrabold text-slate-900 tracking-tight">Inventory Management</h1>
+        <p class="text-slate-500 mt-1">Add, update, or search products in your store database</p>
+      </div>
+      <button @click="openAddModal()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-3 rounded-xl shadow-md transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0 flex items-center gap-2 text-sm self-start">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
+          <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
+        </svg>
+        Add New Product
+      </button>
+    </div>
+
+
+    <!-- ═══════════════════════════════════════════════════════
+         SCAN & QUICK PRICE — Hero Barcode Input
+         ═══════════════════════════════════════════════════════ -->
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 space-y-4"
+         :class="{
+           'scan-flash-found': scanStatus === 'found',
+           'scan-flash-new': scanStatus === 'not-found'
+         }">
+
+      <!-- Scan Input Row -->
+      <div class="flex items-center gap-4">
+        <!-- Scan Status Dot -->
+        <div class="scan-dot"
+             :class="{
+               'ready': scanStatus === 'idle',
+               'found': scanStatus === 'found',
+               'not-found': scanStatus === 'not-found',
+               'saving': scanStatus === 'saving'
+             }"></div>
+
+        <!-- Barcode Input -->
+        <div class="relative flex-grow">
+          <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+            <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/>
+            </svg>
+          </div>
+          <input
+            type="text"
+            id="scan-price-input"
+            x-model="scanInput"
+            @keydown.enter.prevent="onScanEnter()"
+            placeholder="Scan barcode to quickly update price…"
+            autocomplete="off"
+            class="w-full pl-12 pr-24 py-3.5 rounded-xl bg-slate-50 border-2 border-slate-200 text-slate-800 text-lg font-semibold placeholder:text-slate-400 transition-all duration-200 focus:bg-white"
+          >
+          <div class="absolute inset-y-0 right-0 pr-3 flex items-center gap-2">
+            <span class="text-xs text-slate-400 hidden sm:inline">Enter to scan</span>
+            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-500 border border-slate-200">F1</span>
+          </div>
+        </div>
+
+        <!-- Session Counter -->
+        <div x-show="priceSessionCount > 0" class="session-badge flex-shrink-0" x-transition>
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          <span x-text="priceSessionCount + ' priced'"></span>
+        </div>
+      </div>
+
+      <!-- Scan Notification -->
+      <div x-show="scanNotification"
+           x-transition:enter="transition ease-out duration-200"
+           x-transition:enter-start="opacity-0 -translate-y-1"
+           x-transition:enter-end="opacity-100 translate-y-0"
+           x-transition:leave="transition ease-in duration-150"
+           x-transition:leave-start="opacity-100"
+           x-transition:leave-end="opacity-0"
+           class="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium"
+           :class="{
+             'bg-emerald-50 text-emerald-700 border border-emerald-200': scanNotificationType === 'success',
+             'bg-red-50 text-red-700 border border-red-200': scanNotificationType === 'error',
+             'bg-amber-50 text-amber-700 border border-amber-200': scanNotificationType === 'info'
+           }"
+           style="display: none;">
+        <span x-show="scanNotificationType === 'success'" style="display: none;">✓</span>
+        <span x-show="scanNotificationType === 'error'" style="display: none;">⚠</span>
+        <span x-show="scanNotificationType === 'info'" style="display: none;">ℹ</span>
+        <span x-text="scanNotification"></span>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════════
+           QUICK PRICE CARD (shown when product found)
+           ═══════════════════════════════════════════════════════ -->
+      <div x-show="quickPriceProduct"
+           x-transition:enter="transition ease-out duration-250"
+           x-transition:enter-start="opacity-0 -translate-y-2 scale-[0.98]"
+           x-transition:enter-end="opacity-100 translate-y-0 scale-100"
+           x-transition:leave="transition ease-in duration-150"
+           x-transition:leave-start="opacity-100"
+           x-transition:leave-end="opacity-0 -translate-y-2"
+           class="quick-price-card bg-gradient-to-br from-slate-50 to-blue-50/50 rounded-xl border border-blue-200/60 p-5 space-y-4"
+           style="display: none;">
+
+        <!-- Product Header -->
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-bold text-sm shadow-md shadow-blue-500/20"
+                 x-text="quickPriceProduct?.name?.substring(0, 2).toUpperCase()"></div>
+            <div>
+              <h3 class="font-bold text-slate-800 text-base" x-text="quickPriceProduct?.name"></h3>
+              <div class="flex items-center gap-2 mt-0.5">
+                <span class="text-xs font-mono text-slate-400" x-text="quickPriceProduct?.barcode"></span>
+                <span class="text-xs text-slate-300">•</span>
+                <span class="text-xs text-slate-500" x-text="(quickPriceProduct?.stock_qty || 0) + ' ' + (quickPriceProduct?.unit || 'pc') + ' in stock'"></span>
+                <span class="text-xs text-slate-300">•</span>
+                <span class="text-xs text-slate-500" x-text="quickPriceProduct?.category"></span>
+              </div>
+            </div>
+          </div>
+          <button @click="closeQuickPrice()"
+                  class="w-8 h-8 rounded-lg bg-slate-200/60 hover:bg-slate-300/80 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-all duration-150"
+                  title="Close (Esc)">
+            ✕
+          </button>
+        </div>
+
+        <!-- Price Editor Row -->
+        <div class="grid grid-cols-12 gap-4 items-end">
+          <!-- Cost Price -->
+          <div class="col-span-4">
+            <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Cost Price</label>
+            <div class="relative">
+              <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 font-bold text-sm">₱</span>
+              <input
+                type="number"
+                id="quick-cost-price"
+                x-model="quickCostPrice"
+                step="0.01"
+                min="0"
+                class="w-full pl-8 pr-2 py-2.5 rounded-lg bg-white border border-slate-200 text-slate-800 text-base font-bold text-right focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+              >
+            </div>
+          </div>
+
+          <!-- Arrow -->
+          <div class="col-span-1 flex items-center justify-center pb-1">
+            <svg class="w-5 h-5 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+            </svg>
+          </div>
+
+          <!-- Selling Price -->
+          <div class="col-span-4">
+            <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Selling Price</label>
+            <div class="relative">
+              <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 font-bold text-sm">₱</span>
+              <input
+                type="number"
+                id="quick-sell-price"
+                x-model="quickSellingPrice"
+                step="0.01"
+                min="0"
+                class="w-full pl-8 pr-2 py-2.5 rounded-lg bg-white border border-slate-200 text-slate-800 text-base font-bold text-right focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+              >
+            </div>
+          </div>
+
+          <!-- Margin Display -->
+          <div class="col-span-3 pb-0.5">
+            <div class="bg-white rounded-lg border border-slate-200 px-3 py-2 text-center">
+              <div class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">Margin</div>
+              <div class="text-base font-extrabold"
+                   :class="{
+                     'margin-positive': quickMargin > 0,
+                     'margin-negative': quickMargin < 0,
+                     'margin-zero': quickMargin === 0
+                   }"
+                   x-text="'₱' + quickMargin.toFixed(2)"></div>
+              <div class="text-[10px] font-semibold"
+                   :class="{
+                     'text-emerald-500': quickMarginPercent > 0,
+                     'text-red-500': quickMarginPercent < 0,
+                     'text-slate-400': quickMarginPercent === 0
+                   }"
+                   x-text="quickMarginPercent.toFixed(1) + '%'"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="flex items-center gap-3 pt-1">
+          <button @click="saveQuickPrice()"
+                  :disabled="scanStatus === 'saving'"
+                  class="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold text-sm text-white shadow-md transition-all duration-200
+                         bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400
+                         shadow-blue-500/15 hover:shadow-blue-500/25 hover:-translate-y-0.5 active:translate-y-0
+                         disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0">
+            <template x-if="scanStatus === 'saving'">
+              <div class="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+            </template>
+            <template x-if="scanStatus !== 'saving'">
+              <span>💾 Save & Next</span>
+            </template>
+            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold bg-white/20 text-white/80">Enter</span>
+          </button>
+
+          <button @click="editFullDetails()"
+                  class="px-4 py-2.5 rounded-xl font-semibold text-sm text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition-all duration-200">
+            ✏️ Edit Full Details
+          </button>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════════
+           NEW PRODUCT PROMPT (shown when barcode not found)
+           ═══════════════════════════════════════════════════════ -->
+      <div x-show="scanStatus === 'not-found'"
+           x-transition:enter="transition ease-out duration-250"
+           x-transition:enter-start="opacity-0 -translate-y-2"
+           x-transition:enter-end="opacity-100 translate-y-0"
+           x-transition:leave="transition ease-in duration-150"
+           x-transition:leave-start="opacity-100"
+           x-transition:leave-end="opacity-0"
+           class="quick-price-card bg-gradient-to-br from-amber-50 to-orange-50/50 rounded-xl border border-amber-200/60 p-5"
+           style="display: none;">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-amber-500 flex items-center justify-center text-white text-lg shadow-md shadow-amber-500/20">
+              📦
+            </div>
+            <div>
+              <h3 class="font-bold text-slate-800 text-base">New Product Detected</h3>
+              <p class="text-xs text-slate-500 mt-0.5">
+                Barcode <span class="font-mono font-semibold text-amber-600" x-text="scanInput"></span> is not in the database yet
+              </p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <button @click="openAddWithBarcode()"
+                    class="flex items-center gap-1.5 px-4 py-2.5 rounded-xl font-bold text-sm text-white shadow-md transition-all duration-200
+                           bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300
+                           shadow-amber-500/15 hover:-translate-y-0.5 active:translate-y-0">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4">
+                <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
+              </svg>
+              <span>Register Product</span>
+              <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold bg-white/20 text-white/90">Enter</span>
+            </button>
+            <button @click="dismissScanPrompt()"
+                    class="w-8 h-8 rounded-lg bg-slate-200/60 hover:bg-slate-300/80 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-all duration-150"
+                    title="Dismiss (Esc)">
+              ✕
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- Filters and Toolbar -->
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 flex flex-col md:flex-row gap-4 items-center justify-between">
+      <div class="flex flex-col sm:flex-row gap-4 w-full md:w-auto flex-grow">
+        <!-- Search Input -->
+        <div class="relative flex-grow max-w-md">
+          <input type="text" 
+                 x-model="searchQuery" 
+                 @input.debounce.300ms="loadProducts()"
+                 placeholder="Search by product name..." 
+                 class="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent focus:bg-white text-sm transition-all text-slate-700">
+          <div class="absolute left-3 top-3 text-slate-400">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4">
+              <path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11ZM2 9a7 7 0 1 1 12.452 4.391l3.328 3.329a.75.75 0 1 1-1.06 1.06l-3.329-3.328A7 7 0 0 1 2 9Z" clip-rule="evenodd" />
+            </svg>
+          </div>
+        </div>
+
+        <!-- Category Dropdown Filter -->
+        <select x-model="categoryFilter" 
+                @change="loadProducts()"
+                class="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white text-slate-600 min-w-[180px]">
+          <option value="">All Categories</option>
+          <template x-for="cat in categories" :key="cat">
+            <option :value="cat" x-text="cat"></option>
+          </template>
+        </select>
+      </div>
+    </div>
+
+    <!-- Products Table -->
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-sm text-slate-600">
+          <thead class="bg-slate-50 border-b border-slate-100 text-slate-500 font-bold text-xs uppercase tracking-wider">
+            <tr>
+              <th class="py-4 px-6">Barcode</th>
+              <th class="py-4 px-6">Name</th>
+              <th class="py-4 px-6">Category</th>
+              <th class="py-4 px-6 text-right">Cost Price</th>
+              <th class="py-4 px-6 text-right">Selling Price</th>
+              <th class="py-4 px-6 text-center">Stock</th>
+              <th class="py-4 px-6 text-center">Quick?</th>
+              <th class="py-4 px-6 text-center">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            <template x-if="filteredProducts.length === 0">
+              <tr>
+                <td colspan="8" class="py-8 text-center text-slate-400">No products found. Add some items to get started!</td>
+              </tr>
+            </template>
+            <template x-for="product in filteredProducts" :key="product.id">
+              <tr :class="product.is_low_stock ? 'bg-red-50/40 hover:bg-red-50/60' : 'hover:bg-slate-50'" class="transition-colors">
+                <td class="py-4 px-6 font-mono text-xs text-slate-500" x-text="product.barcode || '—'"></td>
+                <td class="py-4 px-6 font-semibold text-slate-800" x-text="product.name"></td>
+                <td class="py-4 px-6 text-xs" x-text="product.category"></td>
+                <td class="py-4 px-6 text-right font-medium text-slate-500" x-text="formatCurrency(product.cost_price)"></td>
+                <td class="py-4 px-6 text-right font-bold text-slate-800" x-text="formatCurrency(product.selling_price)"></td>
+                <td class="py-4 px-6 text-center">
+                  <span :class="product.is_low_stock ? 'bg-red-100 text-red-700 font-bold' : 'bg-slate-100 text-slate-600'" 
+                        class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+                        x-text="product.stock_qty + ' ' + product.unit"></span>
+                </td>
+                <td class="py-4 px-6 text-center">
+                  <div class="flex justify-center">
+                    <span :class="product.is_quick_item ? 'bg-green-500' : 'bg-slate-200'" 
+                          class="w-2.5 h-2.5 rounded-full" 
+                          :title="product.is_quick_item ? 'Quick Item' : 'Standard Item'"></span>
+                  </div>
+                </td>
+                <td class="py-4 px-6">
+                  <div class="flex items-center justify-center gap-3">
+                    <button @click="openEditModal(product)" class="text-blue-600 hover:text-blue-800 font-medium text-xs bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors">
+                      Edit
+                    </button>
+                    <button @click="confirmDelete(product)" class="text-red-600 hover:text-red-800 font-medium text-xs bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition-colors">
+                      Delete
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Add/Edit Product Modal -->
+    <div x-show="showModal" 
+         class="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 modal-backdrop"
+         style="display: none;"
+         x-transition:enter="transition ease-out duration-200"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100">
+      
+      <div class="bg-white rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden border border-slate-100"
+           @click.away="showModal = false"
+           x-transition:enter="transition ease-out duration-300"
+           x-transition:enter-start="scale-95 translate-y-4"
+           x-transition:enter-end="scale-100 translate-y-0">
+        
+        <div class="px-6 py-4 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
+          <h3 class="font-extrabold text-lg text-slate-800" x-text="isEditing ? 'Edit Product Details' : 'Add New Product'"></h3>
+          <button @click="showModal = false" class="text-slate-400 hover:text-slate-600">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
+              <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+            </svg>
+          </button>
+        </div>
+
+        <form @submit.prevent="saveProduct()" class="p-6 space-y-4">
+          
+          <div class="grid grid-cols-2 gap-4">
+            <div class="col-span-2">
+              <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Product Name *</label>
+              <input type="text" id="form-name" x-model="form.name" required placeholder="e.g. Piattos Cheese 85g" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white text-slate-700">
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Category</label>
+              <input type="text" x-model="form.category" placeholder="General" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white text-slate-700">
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Unit of Measure</label>
+              <select x-model="form.unit" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white text-slate-700">
+                <option value="pc">Pieces (pc)</option>
+                <option value="kg">Kilograms (kg)</option>
+                <option value="L">Liters (L)</option>
+                <option value="ml">Milliliters (ml)</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Cost Price (₱)</label>
+              <input type="number" step="0.01" min="0" x-model.number="form.cost_price" required class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white text-slate-700 text-right font-bold">
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Selling Price (1pc) *</label>
+              <input type="number" step="0.01" min="0.01" x-model.number="form.selling_price" required class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white text-slate-700 text-right font-bold">
+            </div>
+
+            <!-- BULK PACK & MOTHER-PACK TIE CONFIGURATION -->
+            <div class="col-span-2 bg-indigo-50/70 p-3.5 rounded-xl border border-indigo-200/80 space-y-3">
+              <div class="flex items-center justify-between">
+                <div class="text-xs font-bold text-indigo-900 uppercase tracking-wider flex items-center gap-1.5">
+                  <span>📦 Hanging Tie / Mother-Pack Auto-Counter</span>
+                </div>
+                <span class="text-[10px] text-indigo-700 bg-indigo-100 font-semibold px-2 py-0.5 rounded">Scan Pack Barcode to Auto-Count</span>
+              </div>
+
+              <div class="grid grid-cols-3 gap-3">
+                <div>
+                  <label class="block text-[10px] font-bold text-slate-600 mb-1">Pack Barcode (Outer Tie)</label>
+                  <input type="text" x-model="form.pack_barcode" placeholder="e.g. 4800016121005-PACK" class="w-full px-2.5 py-2 bg-white border border-indigo-200 rounded-lg text-xs font-mono font-bold text-slate-800">
+                </div>
+                <div>
+                  <label class="block text-[10px] font-bold text-slate-600 mb-1">Pcs per Pack/Tie</label>
+                  <input type="number" min="1" step="1" x-model.number="form.pcs_per_pack" @input="calculateBulkCost()" placeholder="e.g. 10" class="w-full px-2.5 py-2 bg-white border border-indigo-200 rounded-lg text-xs font-bold text-slate-800 text-center">
+                </div>
+                <div>
+                  <label class="block text-[10px] font-bold text-slate-600 mb-1">Full Pack Selling Price (₱)</label>
+                  <input type="number" min="0" step="0.01" x-model.number="form.full_pack_price" placeholder="Auto" class="w-full px-2.5 py-2 bg-white border border-indigo-200 rounded-lg text-xs font-bold text-slate-800 text-right font-mono">
+                </div>
+              </div>
+            </div>
+
+            <!-- JAR & DISPENSER QR REFILL CONFIGURATION -->
+            <div class="col-span-2 bg-emerald-50/70 p-3.5 rounded-xl border border-emerald-200/80 space-y-3">
+              <div class="flex items-center justify-between">
+                <div class="text-xs font-bold text-emerald-900 uppercase tracking-wider flex items-center gap-1.5">
+                  <span>🫙 Jar / Loose Dispenser Refill QR</span>
+                </div>
+                <span class="text-[10px] text-emerald-700 bg-emerald-100 font-semibold px-2 py-0.5 rounded">QR Sticker on Physical Jar</span>
+              </div>
+
+              <div class="grid grid-cols-3 gap-3">
+                <div>
+                  <label class="block text-[10px] font-bold text-slate-600 mb-1">Jar QR Code Identifier</label>
+                  <input type="text" x-model="form.jar_code" placeholder="e.g. JAR:SUGAR-500G" class="w-full px-2.5 py-2 bg-white border border-emerald-200 rounded-lg text-xs font-mono font-bold text-slate-800">
+                </div>
+                <div>
+                  <label class="block text-[10px] font-bold text-slate-600 mb-1">Refill Price (₱)</label>
+                  <input type="number" min="0" step="0.01" x-model.number="form.refill_price" placeholder="₱35.00" class="w-full px-2.5 py-2 bg-white border border-emerald-200 rounded-lg text-xs font-bold text-slate-800 text-right font-mono">
+                </div>
+                <div>
+                  <label class="block text-[10px] font-bold text-slate-600 mb-1">Refill Qty (<span x-text="form.unit || 'unit'"></span>)</label>
+                  <input type="number" min="0.01" step="0.01" x-model.number="form.refill_qty" placeholder="1.0" class="w-full px-2.5 py-2 bg-white border border-emerald-200 rounded-lg text-xs font-bold text-slate-800 text-center font-mono">
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Stock Quantity</label>
+              <input type="number" step="0.001" x-model.number="form.stock_qty" required class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white text-slate-700 text-right">
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Low-Stock Alert</label>
+              <input type="number" step="0.001" x-model.number="form.low_stock_threshold" required class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white text-slate-700 text-right">
+            </div>
+
+            <!-- SINGLE UNIT BARCODE FIELD -->
+            <div class="col-span-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
+              <div class="flex items-center justify-between mb-1.5">
+                <label class="block text-xs font-bold text-slate-800 uppercase tracking-wider">
+                  📷 Single-Unit Barcode (e.g. 1 Sachet)
+                </label>
+                <span class="text-[10px] text-slate-500 font-semibold bg-slate-200 px-2 py-0.5 rounded-md">Optional</span>
+              </div>
+              <input type="text" id="form-barcode" x-model="form.barcode" placeholder="Scan piece barcode or type manually..." class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800 font-mono font-bold tracking-wider">
+            </div>
+
+          </div>
+
+          <div class="flex justify-end gap-3 pt-4 border-t border-slate-100 mt-6">
+            <button type="button" @click="showModal = false" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-4 py-2 rounded-xl text-sm transition-colors">
+              Cancel
+            </button>
+            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-5 py-2 rounded-xl text-sm shadow-sm transition-colors">
+              Save Product
+            </button>
+          </div>
+
+        </form>
+      </div>
+    </div>
+
+    <!-- Delete Confirm Modal -->
+    <div x-show="showDeleteConfirm" 
+         class="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 modal-backdrop"
+         style="display: none;"
+         x-transition:enter="transition ease-out duration-200"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100">
+      
+      <div class="bg-white rounded-2xl max-w-sm w-full shadow-2xl p-6 border border-slate-100"
+           @click.away="showDeleteConfirm = false"
+           x-transition:enter="transition ease-out duration-300"
+           x-transition:enter-start="scale-95 translate-y-4"
+           x-transition:enter-end="scale-100 translate-y-0">
+        
+        <div class="flex flex-col items-center text-center">
+          <div class="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center text-red-600 mb-4 shadow-inner">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-6 h-6">
+              <path fill-rule="evenodd" d="M8.75 3A.75.75 0 0 0 8 3.75V5H4.75a.75.75 0 0 0 0 1.5h.25v9a2.25 2.25 0 0 0 2.25 2.25h5.5A2.25 2.25 0 0 0 15 15.5v-9h.25a.75.75 0 0 0 0-1.5H12V3.75A.75.75 0 0 0 11.25 3h-2.5ZM10 7.5a.75.75 0 0 1 .75.75v5.5a.75.75 0 0 1-1.5 0v-5.5A.75.75 0 0 1 10 7.5Zm-2.25.75a.75.75 0 0 0-1.5 0v5.5a.75.75 0 0 0 1.5 0v-5.5Zm5.25-.75a.75.75 0 0 1 .75.75v5.5a.75.75 0 0 1-1.5 0v-5.5a.75.75 0 0 1 .75-.75Z" clip-rule="evenodd" />
+            </svg>
+          </div>
+          <h3 class="font-extrabold text-lg text-slate-800 mb-2">Delete Product?</h3>
+          <p class="text-slate-400 text-sm mb-6">Are you sure you want to delete <span class="font-semibold text-slate-700" x-text="deleteTarget?.name"></span>? This action cannot be undone.</p>
+        </div>
+
+        <div class="flex justify-end gap-3">
+          <button @click="showDeleteConfirm = false" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-4 py-2 rounded-xl text-sm transition-colors">
+            Cancel
+          </button>
+          <button @click="deleteProduct()" class="bg-red-600 hover:bg-red-700 text-white font-semibold px-5 py-2 rounded-xl text-sm shadow-sm transition-colors">
+            Delete
+          </button>
+        </div>
+
+      </div>
+    </div>
+{% endblock %}
