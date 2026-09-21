@@ -12,7 +12,7 @@ import sys
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse
 from pathlib import Path
 
 from app.database import init_db
@@ -62,6 +62,24 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 # ═══════════════════════════════════════════════════════════════
 # PAGE ROUTES (serve HTML templates)
 # ═══════════════════════════════════════════════════════════════
+
+@app.get("/manifest.webmanifest")
+async def pwa_manifest():
+    """Serve PWA webmanifest for full-screen tablet installation."""
+    manifest_path = STATIC_DIR / "dist" / "manifest.webmanifest"
+    if manifest_path.exists():
+        return FileResponse(manifest_path, media_type="application/manifest+json")
+    return HTMLResponse(status_code=404)
+
+
+@app.get("/favicon.svg")
+async def pwa_favicon():
+    """Serve PWA vector icon."""
+    favicon_path = STATIC_DIR / "dist" / "favicon.svg"
+    if favicon_path.exists():
+        return FileResponse(favicon_path, media_type="image/svg+xml")
+    return HTMLResponse(status_code=404)
+
 
 @app.get("/", response_class=HTMLResponse)
 async def cashier_page(request: Request):

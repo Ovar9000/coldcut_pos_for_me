@@ -1,0 +1,19 @@
+{
+  "name": "Coldcut POS — Sari-Sari & Frozen Cuts",
+  "short_name": "Coldcut POS",
+  "description": "Standalone Cashier Terminal for Cold Cut, Poultry & Grocery Retail",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "orientation": "landscape-primary",
+  "icons": [
+    {
+      "src": "./favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "finance", "productivity"]
+}

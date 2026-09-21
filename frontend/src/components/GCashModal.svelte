@@ -13,13 +13,14 @@
     AlertCircle
   } from 'lucide-svelte'
   import { onMount, onDestroy } from 'svelte'
+  import { submitGCashTransaction } from '../lib/api'
 
   interface Props {
     onComplete: (msg: string) => void
     onClose: () => void
   }
 
-  let { onComplete, onClose }: Props = $props()
+  let { onComplete, onClose } = $props<Props>()
 
   // Direction: 'GCASH_IN' (Customer buys GCash with Cash) or 'GCASH_OUT' (Customer sends GCash to get Cash)
   let transactionType = $state<'GCASH_IN' | 'GCASH_OUT'>('GCASH_OUT')
@@ -260,17 +261,7 @@
         gcash_timestamp: gcashTimestamp || new Date().toLocaleString('en-PH')
       }
 
-      const res = await fetch('/api/gcash/transact', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      })
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        throw new Error(err.detail || 'Failed to record GCash transaction')
-      }
-
+      await submitGCashTransaction(payload)
       stopCamera()
       onComplete(`Recorded ${transactionType === 'GCASH_IN' ? 'Cash-In' : 'Cash-Out'} of ₱${amt.toFixed(2)} (Fee: ₱${calculatedFee.toFixed(2)})`)
     } catch (e: any) {

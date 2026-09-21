@@ -48,8 +48,8 @@ export function setupBarcodeListener(onScan: (barcode: string) => void) {
     const target = e.target as HTMLElement
     const isInput = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')
     
-    // If it's Enter, check if we have a scanned barcode
-    if (e.key === 'Enter') {
+    // If it's Enter / Carriage Return, check if we have a scanned barcode
+    if (e.key === 'Enter' || e.code === 'Enter' || e.keyCode === 13) {
       if (buffer.length >= 3) {
         e.preventDefault()
         const scanned = buffer.trim()
