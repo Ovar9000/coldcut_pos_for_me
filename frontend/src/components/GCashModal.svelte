@@ -448,6 +448,18 @@
               class="w-full pl-8 pr-3 py-2.5 bg-slate-50 border-2 border-blue-400 rounded-xl text-lg font-black font-mono text-slate-900 focus:outline-none focus:bg-white"
             />
           </div>
+          <!-- Quick Preset Amounts -->
+          <div class="grid grid-cols-3 sm:grid-cols-6 gap-1 mt-2">
+            {#each [100, 200, 500, 1000, 2000, 5000] as pAmt}
+              <button
+                type="button"
+                onclick={() => inputAmount = pAmt.toString()}
+                class="py-1 text-[11px] font-bold font-mono rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-800 transition-colors cursor-pointer shadow-2xs"
+              >
+                ₱{pAmt >= 1000 ? `${pAmt / 1000}k` : pAmt}
+              </button>
+            {/each}
+          </div>
         </div>
 
         <!-- Calculated Fee -->

@@ -1,8 +1,9 @@
 <script lang="ts">
   import { searchProducts, lookupBarcode } from '../lib/api'
   import { parseScaleBarcode } from '../lib/scanner'
+  import { sound } from '../lib/sound'
   import type { Product } from '../types'
-  import { Search, Barcode, Scale, Loader2, ArrowRight } from 'lucide-svelte'
+  import { Search, Barcode, Scale, Loader2, ArrowRight, X, AlertTriangle } from 'lucide-svelte'
   import { onMount } from 'svelte'
 
   interface Props {
@@ -19,6 +20,8 @@
   let isLoading = $state(false)
   let errorMessage = $state('')
   let debounceTimer: any = null
+  let errorTimer: any = null
+  let isScanSuccessFlash = $state(false)
 
   export function focusInput() {
     inputEl?.focus()
@@ -32,6 +35,22 @@
     errorMessage = ''
   }
 
+  function triggerScanFlash() {
+    isScanSuccessFlash = true
+    setTimeout(() => {
+      isScanSuccessFlash = false
+    }, 450)
+  }
+
+  function setError(msg: string) {
+    clearTimeout(errorTimer)
+    errorMessage = msg
+    sound.playBeep('error')
+    errorTimer = setTimeout(() => {
+      errorMessage = ''
+    }, 3500)
+  }
+
   function handleInput() {
     errorMessage = ''
     const val = query.trim()
@@ -42,7 +61,7 @@
       return
     }
 
-    // If it's purely digits and >= 8 digits, don't query search API immediately; let Enter handle barcode scan
+    // Pure barcode digits of >= 8 characters - wait for Enter or Scanner gun termination
     if (/^\d{8,}$/.test(val)) {
       results = []
       return
@@ -59,7 +78,7 @@
       } finally {
         isLoading = false
       }
-    }, 180)
+    }, 150)
   }
 
   async function handleKeyDown(e: KeyboardEvent) {
@@ -78,13 +97,13 @@
       const val = query.trim()
       if (!val) return
 
-      // If a dropdown item is highlighted and we were searching text
+      // If a dropdown item is highlighted
       if (results.length > 0 && selectedIndex >= 0 && selectedIndex < results.length) {
         selectProduct(results[selectedIndex])
         return
       }
 
-      // Otherwise treat as barcode / scale barcode lookup
+      // Barcode / PLU code lookup
       await processBarcodeOrCode(val)
     } else if (e.key === 'Escape') {
       clear()
@@ -95,17 +114,19 @@
     isLoading = true
     errorMessage = ''
     try {
-      // Check if it matches an EAN-13 scale barcode (prefix 20/21)
+      // Check if it matches an EAN-13 scale barcode (prefix 20/21 or Dahua 03)
       const scaleInfo = parseScaleBarcode(code)
       const product = await lookupBarcode(code)
 
+      triggerScanFlash()
+      sound.playBeep('scan')
+
       if (scaleInfo.isScaleBarcode && product.scan_type === 'scale_weight') {
-        // Automatically add weighed item from scale barcode
         onSelectProduct(
           product,
           product.default_qty || scaleInfo.weightKg || 1,
           product.default_price || product.selling_price,
-          product.pack_label || `Scale Weighed (${product.default_qty}kg)`
+          product.pack_label || `Scale Weighed (${product.default_qty || scaleInfo.weightKg}kg)`
         )
       } else if (product.scan_type === 'mother_pack') {
         onSelectProduct(
@@ -122,22 +143,22 @@
           product.pack_label || `Jar Refill (${product.refill_qty}${product.unit})`
         )
       } else if (['kg', 'l', 'g'].includes(product.unit.toLowerCase()) && !scaleInfo.isScaleBarcode) {
-        // Weighed item without scale barcode -> trigger Dual Weight / Peso Modal!
         onRequestWeightModal(product)
       } else {
-        // Standard item
         onSelectProduct(product)
       }
 
       clear()
     } catch (err: any) {
-      errorMessage = err.message || `No product found for "${code}"`
+      setError(err.message || `No product found for "${code}"`)
     } finally {
       isLoading = false
     }
   }
 
   function selectProduct(product: Product) {
+    triggerScanFlash()
+    sound.playBeep('scan')
     if (['kg', 'l', 'g'].includes(product.unit.toLowerCase())) {
       onRequestWeightModal(product)
     } else {
@@ -171,31 +192,45 @@
       onkeydown={handleKeyDown}
       type="text"
       placeholder="Scan Barcode / Scale Sticker OR Type Name... (F2)"
-      class="w-full pl-10 pr-16 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 shadow-xs transition-all"
+      class="w-full pl-10 pr-24 py-3 bg-white border border-slate-300 rounded-xl text-sm font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 shadow-xs transition-all {isScanSuccessFlash ? 'ring-4 ring-emerald-400 border-emerald-500 bg-emerald-50/20' : ''}"
     />
 
-    <div class="absolute right-2.5 flex items-center gap-1">
+    <!-- Right Controls: Clear button for touch + Shortcut hints -->
+    <div class="absolute right-2.5 flex items-center gap-1.5">
+      {#if query}
+        <button
+          type="button"
+          onclick={clear}
+          class="w-6 h-6 flex items-center justify-center rounded-full bg-slate-200 hover:bg-slate-300 text-slate-600 transition-colors cursor-pointer"
+          title="Clear search text"
+        >
+          <X class="w-3.5 h-3.5" />
+        </button>
+      {/if}
       <kbd class="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 bg-slate-100 border border-slate-200 rounded">F2</kbd>
       <kbd class="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 bg-slate-100 border border-slate-200 rounded">Enter</kbd>
     </div>
   </div>
 
-  <!-- Error Message Alert -->
+  <!-- Auto-dismissing Error Message Alert -->
   {#if errorMessage}
-    <div class="absolute top-full mt-1.5 left-0 right-0 z-50 p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-xs font-semibold text-rose-800 shadow-md flex items-center justify-between">
-      <span>⚠️ {errorMessage}</span>
-      <button onclick={() => errorMessage = ''} class="text-rose-500 hover:text-rose-700 text-sm font-bold">×</button>
+    <div class="absolute top-full mt-1.5 left-0 right-0 z-50 p-2.5 bg-rose-50 border border-rose-300 rounded-xl text-xs font-semibold text-rose-800 shadow-md flex items-center justify-between animate-in fade-in slide-in-from-top-1 duration-150">
+      <span class="flex items-center gap-1.5">
+        <AlertTriangle class="w-4 h-4 text-rose-600 shrink-0" />
+        <span>{errorMessage}</span>
+      </span>
+      <button onclick={() => errorMessage = ''} class="text-rose-500 hover:text-rose-700 text-base font-bold px-1 cursor-pointer">×</button>
     </div>
   {/if}
 
   <!-- Live Search Results Dropdown -->
   {#if results.length > 0}
-    <div class="absolute top-full mt-1.5 left-0 right-0 z-50 bg-white border border-slate-200 rounded-xl shadow-xl max-h-72 overflow-y-auto divide-y divide-slate-100">
+    <div class="absolute top-full mt-1.5 left-0 right-0 z-50 bg-white border border-slate-200 rounded-xl shadow-xl max-h-72 overflow-y-auto divide-y divide-slate-100 animate-in fade-in duration-100">
       {#each results as product, index}
         <button
           type="button"
           onclick={() => selectProduct(product)}
-          class="w-full px-3.5 py-2.5 text-left flex items-center justify-between transition-colors {index === selectedIndex ? 'bg-emerald-50 text-emerald-950' : 'hover:bg-slate-50 text-slate-800'}"
+          class="w-full px-3.5 py-2.5 text-left flex items-center justify-between transition-colors cursor-pointer {index === selectedIndex ? 'bg-emerald-50 text-emerald-950' : 'hover:bg-slate-50 text-slate-800'}"
         >
           <div class="flex items-center gap-2.5 min-w-0">
             <span class="text-base flex-shrink-0">
@@ -205,10 +240,15 @@
               <p class="text-xs font-bold truncate {index === selectedIndex ? 'text-emerald-950' : 'text-slate-900'}">
                 {product.name}
               </p>
-              <div class="flex items-center gap-2 text-[10px] text-slate-500">
-                <span>Stock: {product.stock_qty} {product.unit}</span>
+              <div class="flex items-center gap-2 text-[10px] text-slate-500 mt-0.5">
+                <span class="{product.stock_qty <= (product.low_stock_threshold || 5) ? 'text-rose-600 font-bold' : ''}">
+                  Stock: {product.stock_qty} {product.unit}
+                </span>
+                {#if product.plu_code}
+                  <span class="px-1 py-0.2 rounded bg-amber-100 text-amber-800 font-mono font-bold">PLU {product.plu_code}</span>
+                {/if}
                 {#if product.barcode}
-                  <span>• Barcode: {product.barcode}</span>
+                  <span>• {product.barcode}</span>
                 {/if}
               </div>
             </div>

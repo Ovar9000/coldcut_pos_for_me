@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Product } from '../types'
+  import { sound } from '../lib/sound'
   import {
     Drumstick,
     Package,
@@ -7,7 +8,9 @@
     Snowflake,
     GlassWater,
     Scale,
-    ShieldCheck
+    ShieldCheck,
+    Zap,
+    RotateCcw
   } from 'lucide-svelte'
 
   interface Props {
@@ -67,7 +70,6 @@
   ]
 
   function handleGenericAdd(item: { id: number; plu?: number; name: string; price: number; unit: string; badge?: string }) {
-    // Exact match in inventory if registered, otherwise fallback to item
     const existing = quickItems.find(p => p.name.trim().toLowerCase() === item.name.trim().toLowerCase())
 
     const productToAdd: Product = existing || {
@@ -87,6 +89,7 @@
     if (item.unit === 'kg') {
       onRequestWeightModal(productToAdd)
     } else {
+      sound.playBeep('scan')
       onSelectProduct(productToAdd, multiplier, item.price, item.badge)
       multiplier = 1
     }
@@ -96,77 +99,97 @@
     if (['kg', 'l', 'g'].includes(prod.unit.toLowerCase())) {
       onRequestWeightModal(prod)
     } else {
+      sound.playBeep('scan')
       onSelectProduct(prod, multiplier)
       multiplier = 1
     }
   }
 </script>
 
-<div class="flex flex-col h-full bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+<div class="flex flex-col h-full bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden select-none">
   <!-- Tabs & Multiplier Header -->
-  <div class="p-3 bg-slate-50/80 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
+  <div class="p-3 bg-slate-50/90 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 flex-shrink-0">
     <!-- Category Tabs -->
-    <div class="flex items-center gap-1 bg-slate-200/70 p-1 rounded-xl text-xs font-semibold overflow-x-auto">
+    <div class="flex items-center gap-1 bg-slate-200/70 p-1 rounded-xl text-xs font-semibold overflow-x-auto max-w-full">
       <button
         type="button"
         onclick={() => activeTab = 'poultry'}
-        class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap {activeTab === 'poultry' ? 'bg-white text-red-900 shadow-xs font-bold' : 'text-slate-600 hover:text-slate-900'}"
+        class="flex items-center gap-1.5 px-3 py-2 rounded-lg transition-all cursor-pointer whitespace-nowrap {activeTab === 'poultry' ? 'bg-white text-red-900 shadow-xs font-bold' : 'text-slate-600 hover:text-slate-900'}"
       >
-        <Drumstick class="w-3.5 h-3.5 text-red-600" />
-        <span>🍗 Poultry & Cuts (kg)</span>
+        <Drumstick class="w-4 h-4 text-red-600" />
+        <span>🍗 Poultry & Cuts</span>
       </button>
 
       <button
         type="button"
         onclick={() => activeTab = 'hotdogs'}
-        class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap {activeTab === 'hotdogs' ? 'bg-white text-red-900 shadow-xs font-bold' : 'text-slate-600 hover:text-slate-900'}"
+        class="flex items-center gap-1.5 px-3 py-2 rounded-lg transition-all cursor-pointer whitespace-nowrap {activeTab === 'hotdogs' ? 'bg-white text-red-900 shadow-xs font-bold' : 'text-slate-600 hover:text-slate-900'}"
       >
-        <Package class="w-3.5 h-3.5 text-amber-600" />
-        <span>🌭 TJ Hotdogs & Packs</span>
+        <Package class="w-4 h-4 text-amber-600" />
+        <span>🌭 TJ Hotdogs</span>
       </button>
 
       <button
         type="button"
         onclick={() => activeTab = 'ice'}
-        class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap {activeTab === 'ice' ? 'bg-cyan-600 text-white shadow-xs font-bold' : 'text-slate-600 hover:text-slate-900'}"
+        class="flex items-center gap-1.5 px-3 py-2 rounded-lg transition-all cursor-pointer whitespace-nowrap {activeTab === 'ice' ? 'bg-cyan-600 text-white shadow-xs font-bold' : 'text-slate-600 hover:text-slate-900'}"
       >
-        <Snowflake class="w-3.5 h-3.5 {activeTab === 'ice' ? 'text-white' : 'text-cyan-600'}" />
-        <span>🧊 Ice Freezer (Sanitary)</span>
+        <Snowflake class="w-4 h-4 {activeTab === 'ice' ? 'text-white' : 'text-cyan-600'}" />
+        <span>🧊 Ice Freezer</span>
       </button>
 
       <button
         type="button"
         onclick={() => activeTab = 'drinks'}
-        class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap {activeTab === 'drinks' ? 'bg-white text-blue-900 shadow-xs font-bold' : 'text-slate-600 hover:text-slate-900'}"
+        class="flex items-center gap-1.5 px-3 py-2 rounded-lg transition-all cursor-pointer whitespace-nowrap {activeTab === 'drinks' ? 'bg-white text-blue-900 shadow-xs font-bold' : 'text-slate-600 hover:text-slate-900'}"
       >
-        <GlassWater class="w-3.5 h-3.5 text-blue-600" />
+        <GlassWater class="w-4 h-4 text-blue-600" />
         <span>🥤 Chilled Drinks</span>
       </button>
 
       <button
         type="button"
         onclick={() => activeTab = 'all'}
-        class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap {activeTab === 'all' ? 'bg-white text-slate-900 shadow-xs font-bold' : 'text-slate-500 hover:text-slate-900'}"
+        class="flex items-center gap-1 px-3 py-2 rounded-lg transition-all cursor-pointer whitespace-nowrap {activeTab === 'all' ? 'bg-white text-slate-900 shadow-xs font-bold' : 'text-slate-500 hover:text-slate-900'}"
       >
-        <Sparkles class="w-3.5 h-3.5 text-indigo-500" />
+        <Sparkles class="w-4 h-4 text-indigo-500" />
         <span>Catalog ({quickItems.length})</span>
       </button>
     </div>
 
-    <!-- Multiplier Bar -->
+    <!-- Multiplier Bar with Enlarged Touch Targets (Min 36px Height) -->
     <div class="flex items-center gap-1 bg-white border border-slate-200 px-2 py-1 rounded-xl shadow-2xs">
-      <span class="text-[11px] font-bold text-slate-500 mr-1">Qty:</span>
+      <span class="text-[11px] font-bold text-slate-500 mr-1 hidden sm:inline">Qty:</span>
       {#each [1, 2, 3, 5, 10] as num}
         <button
           type="button"
           onclick={() => multiplier = num}
-          class="px-2 py-0.5 rounded-md text-xs font-bold font-mono transition-all cursor-pointer {multiplier === num ? 'bg-cyan-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'}"
+          class="h-8 min-w-[32px] sm:min-w-[36px] px-2 rounded-lg text-xs font-bold font-mono transition-all cursor-pointer flex items-center justify-center {multiplier === num ? 'bg-cyan-600 text-white shadow-xs scale-105' : 'text-slate-600 hover:bg-slate-100 active:bg-slate-200'}"
+          title="Set quantity multiplier to {num}x"
         >
           {num}x
         </button>
       {/each}
     </div>
   </div>
+
+  <!-- Multiplier Active Alert Banner -->
+  {#if multiplier > 1}
+    <div class="px-4 py-2 bg-amber-500 text-white flex items-center justify-between text-xs font-bold shadow-inner">
+      <div class="flex items-center gap-1.5">
+        <Zap class="w-4 h-4 text-yellow-200 animate-pulse" />
+        <span>MULTIPLIER ACTIVE: Next tapped tile will add {multiplier} units!</span>
+      </div>
+      <button
+        type="button"
+        onclick={() => multiplier = 1}
+        class="flex items-center gap-1 text-[11px] bg-amber-700 hover:bg-amber-800 px-2 py-0.5 rounded cursor-pointer transition-colors"
+      >
+        <RotateCcw class="w-3 h-3" />
+        <span>Reset 1x</span>
+      </button>
+    </div>
+  {/if}
 
   <!-- Sanitary Ice Notice Banner when Ice tab is active -->
   {#if activeTab === 'ice'}
@@ -183,10 +206,10 @@
 
   <!-- Scale Reminder Banner when Poultry tab is active -->
   {#if activeTab === 'poultry'}
-    <div class="px-4 py-2 bg-amber-50/70 border-b border-amber-200 flex items-center justify-between text-xs text-amber-900">
+    <div class="px-4 py-2 bg-amber-50/80 border-b border-amber-200 flex items-center justify-between text-xs text-amber-900">
       <div class="flex items-center gap-2 font-medium">
         <Scale class="w-4 h-4 text-amber-600 shrink-0" />
-        <span>Dahua Scale Barcode Ready: Scan weight label stickers (03..., 21...) or click any cut to enter kilograms.</span>
+        <span>Dahua Scale Barcode Ready: Scan weight label (03..., 21...) or tap any cut to weigh.</span>
       </div>
       <span class="text-[10px] font-bold uppercase tracking-wider bg-amber-200/60 px-2 py-0.5 rounded-md text-amber-800">
         Weighed per kg
@@ -194,7 +217,7 @@
     </div>
   {/if}
 
-  <!-- Tiles Grid -->
+  <!-- Tiles Grid with Enhanced Touch Responsiveness -->
   <div class="p-3 flex-1 overflow-y-auto min-h-0">
     <!-- 1. POULTRY & CUTS -->
     {#if activeTab === 'poultry'}
@@ -203,19 +226,19 @@
           <button
             type="button"
             onclick={() => handleGenericAdd(item)}
-            class="flex flex-col items-start justify-between p-3 rounded-xl border text-left transition-all hover:scale-[1.02] active:scale-95 shadow-2xs cursor-pointer min-h-[92px] {item.color}"
+            class="flex flex-col items-start justify-between p-3.5 rounded-xl border text-left transition-all hover:scale-[1.02] active:scale-95 shadow-2xs cursor-pointer min-h-[96px] {item.color}"
           >
             <div class="w-full flex items-center justify-between">
-              <span class="text-xl leading-none">{item.icon}</span>
-              <span class="text-[10px] font-bold font-mono px-1.5 py-0.5 rounded-md bg-white/80 border border-current shadow-2xs">
+              <span class="text-2xl leading-none">{item.icon}</span>
+              <span class="text-[10px] font-bold font-mono px-1.5 py-0.5 rounded-md bg-white/90 text-slate-900 border border-current shadow-2xs">
                 {item.badge}
               </span>
             </div>
-            <div class="mt-2 w-full">
+            <div class="mt-2.5 w-full">
               <span class="text-xs font-bold line-clamp-1 block leading-tight">{item.name}</span>
               <div class="flex items-center justify-between mt-1">
                 <span class="text-xs font-extrabold font-mono">₱{item.price.toFixed(2)}/kg</span>
-                <span class="text-[9px] uppercase font-bold tracking-wider text-slate-500">Tap to Weigh</span>
+                <span class="text-[9px] uppercase font-bold tracking-wider text-slate-600 bg-white/70 px-1 rounded">Weigh</span>
               </div>
             </div>
           </button>
@@ -229,15 +252,15 @@
           <button
             type="button"
             onclick={() => handleGenericAdd(item)}
-            class="flex flex-col items-start justify-between p-3 rounded-xl border text-left transition-all hover:scale-[1.02] active:scale-95 shadow-2xs cursor-pointer min-h-[92px] {item.color}"
+            class="flex flex-col items-start justify-between p-3.5 rounded-xl border text-left transition-all hover:scale-[1.02] active:scale-95 shadow-2xs cursor-pointer min-h-[96px] {item.color}"
           >
             <div class="w-full flex items-center justify-between">
-              <span class="text-xl leading-none">{item.icon}</span>
+              <span class="text-2xl leading-none">{item.icon}</span>
               <span class="text-[10px] font-bold font-mono px-1.5 py-0.5 rounded-md bg-white/90 text-slate-900 border border-slate-200 shadow-2xs">
                 {item.badge}
               </span>
             </div>
-            <div class="mt-2 w-full">
+            <div class="mt-2.5 w-full">
               <span class="text-xs font-bold line-clamp-1 block leading-tight">{item.name}</span>
               <span class="text-sm font-extrabold font-mono mt-0.5 block">₱{item.price.toFixed(2)}</span>
             </div>
@@ -252,11 +275,11 @@
           <button
             type="button"
             onclick={() => handleGenericAdd(item)}
-            class="flex flex-col items-start justify-between p-4 rounded-2xl border text-left transition-all hover:scale-[1.02] active:scale-95 shadow-2xs cursor-pointer min-h-[110px] {item.color}"
+            class="flex flex-col items-start justify-between p-4 rounded-2xl border text-left transition-all hover:scale-[1.02] active:scale-95 shadow-2xs cursor-pointer min-h-[114px] {item.color}"
           >
             <div class="w-full flex items-center justify-between">
               <span class="text-3xl leading-none">{item.icon}</span>
-              <span class="text-xs font-bold font-mono px-2 py-0.5 rounded-lg bg-white/90 text-cyan-950 border border-cyan-200 shadow-2xs">
+              <span class="text-xs font-bold font-mono px-2 py-0.5 rounded-lg bg-white/95 text-cyan-950 border border-cyan-200 shadow-2xs">
                 {item.badge}
               </span>
             </div>
@@ -275,15 +298,15 @@
           <button
             type="button"
             onclick={() => handleGenericAdd(item)}
-            class="flex flex-col items-start justify-between p-3 rounded-xl border text-left transition-all hover:scale-[1.02] active:scale-95 shadow-2xs cursor-pointer min-h-[92px] {item.color}"
+            class="flex flex-col items-start justify-between p-3.5 rounded-xl border text-left transition-all hover:scale-[1.02] active:scale-95 shadow-2xs cursor-pointer min-h-[96px] {item.color}"
           >
             <div class="w-full flex items-center justify-between">
-              <span class="text-xl leading-none">{item.icon}</span>
+              <span class="text-2xl leading-none">{item.icon}</span>
               <span class="text-[10px] font-bold font-mono px-1.5 py-0.5 rounded-md bg-white/90 text-slate-800 border border-slate-200 shadow-2xs">
                 {item.badge}
               </span>
             </div>
-            <div class="mt-2 w-full">
+            <div class="mt-2.5 w-full">
               <span class="text-xs font-bold line-clamp-1 block leading-tight">{item.name}</span>
               <span class="text-sm font-extrabold font-mono mt-0.5 text-blue-900 block">₱{item.price.toFixed(2)}</span>
             </div>
@@ -304,15 +327,15 @@
             <button
               type="button"
               onclick={() => handleCustomAdd(prod)}
-              class="flex flex-col items-start justify-between p-3 rounded-xl border border-slate-200 bg-white hover:border-cyan-400 hover:bg-cyan-50/30 text-left transition-all hover:scale-[1.02] active:scale-95 shadow-2xs cursor-pointer min-h-[92px]"
+              class="flex flex-col items-start justify-between p-3.5 rounded-xl border border-slate-200 bg-white hover:border-cyan-400 hover:bg-cyan-50/30 text-left transition-all hover:scale-[1.02] active:scale-95 shadow-2xs cursor-pointer min-h-[96px]"
             >
               <div class="w-full flex items-center justify-between">
-                <span class="w-3 h-3 rounded-full" style="background-color: {prod.quick_button_color || '#06b6d4'}"></span>
+                <span class="w-3.5 h-3.5 rounded-full" style="background-color: {prod.quick_button_color || '#06b6d4'}"></span>
                 <span class="text-[10px] font-mono font-bold text-slate-400">
                   {prod.plu_code ? `PLU ${prod.plu_code}` : prod.unit}
                 </span>
               </div>
-              <div class="mt-2 w-full">
+              <div class="mt-2.5 w-full">
                 <span class="text-xs font-bold text-slate-800 line-clamp-1 block leading-tight">{prod.name}</span>
                 <span class="text-xs font-extrabold font-mono text-cyan-700 mt-0.5 block">
                   ₱{prod.selling_price.toFixed(2)}{prod.unit === 'kg' ? '/kg' : ''}
